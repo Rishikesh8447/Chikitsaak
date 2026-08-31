@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String              @id @default(uuid())
+  clerkUserId            String              @unique
+  email                  String              @unique
+  name                   String?
+  imageUrl               String?
+  role                   UserRole            @default(UNASSIGNED)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  credits                Int                 @default(2)
+  experience             Int?
+  credentialUrl          String?
+  description            String?             @db.Text
+  verificationStatus     VerificationStatus? @default(PENDING)
+  specialty              String?
+  city                   String?
+  state                  String?
+  country                String?
+  bloodGroup             String?
+  allergies              String?             @db.Text
+  existingConditions     String?             @db.Text
+  currentMedications     String?             @db.Text
+  doctorAppointments     Appointment[]       @relation("DoctorAppointments")
+  patientAppointments    Appointment[]       @relation("PatientAppointments")
+  availabilities         Availability[]
+  transactions           CreditTransaction[]
+  payouts                Payout[]
+  notifications          Notification[]
+  prescriptionsAsPatient Prescription[]      @relation("PrescriptionPatient")
+  prescriptionsAsDoctor  Prescription[]      @relation("PrescriptionDoctor")
+  reviewsGiven           Review[]            @relation("ReviewPatient")
+  reviewsReceived        Review[]            @relation("ReviewDoctor")
+
+  @@index([city])
+  @@index([state])
+  @@index([country])
+  @@index([country, state, city])
+}
+
+model Availability {
+  id          String     @id @default(uuid())
+  doctorId    String
+  startTime   DateTime
+  endTime     DateTime
+  dayOfWeek   Int?
+  isRecurring Boolean    @default(true)
+  blockedDate DateTime?
+  status      SlotStatus @default(AVAILABLE)
+  doctor      User       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, startTime])
+  @@index([doctorId, dayOfWeek, status])
+}
+
+model Appointment {
+  id                    String                @id @default(uuid())
+  patientId             String
+  doctorId              String
+  startTime             DateTime
+  endTime               DateTime
+  status                AppointmentStatus     @default(SCHEDULED)
+  notes                 String?               @db.Text
+  patientDescription    String?               @db.Text
+  aiSummary             String?               @db.Text
+  aiSpecialtySuggestion String?
+  videoSessionId        String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  doctor                User                  @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  patient               User                  @relation("PatientAppointments", fields: [patientId], references: [id])
+  notifications         Notification[]
+  reminders             AppointmentReminder[]
+  prescription          Prescription?
+  review                Review?
+
+  @@index([status, startTime])
+  @@index([doctorId, startTime])
+}
+
+model CreditTransaction {
+  id            String          @id @default(uuid())
+  userId        String
+  amount        Int
+  type          TransactionType
+  packageId     String?
+  allocationKey String?         @unique
+  createdAt     DateTime        @default(now())
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Payout {
+  id          String       @id @default(uuid())
+  doctorId    String
+  amount      Int
+  status      PayoutStatus @default(PROCESSING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  credits     Int          @default(0)
+  platformFee Int          @default(0)
+  netAmount   Int          @default(0)
+  paypalEmail String?
+  processedAt DateTime?
+  processedBy String?
+  doctor      User         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([status])
+}
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String
+  appointmentId String?
+  type          NotificationType
+  title         String
+  message       String           @db.Text
+  dedupeKey     String           @unique
+  readAt        DateTime?
+  createdAt     DateTime         @default(now())
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment   Appointment?     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([appointmentId, type])
+}
+
+model AppointmentReminder {
+  id            String       @id @default(uuid())
+  appointmentId String
+  type          ReminderType
+  sentAt        DateTime     @default(now())
+  appointment   Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, type])
+  @@index([type, sentAt])
+}
+
+model Prescription {
+  id                  String                 @id @default(uuid())
+  appointmentId       String                 @unique
+  patientId           String
+  doctorId            String
+  diagnosis           String?                @db.Text
+  generalInstructions String?                @db.Text
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  appointment         Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient             User                   @relation("PrescriptionPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  doctor              User                   @relation("PrescriptionDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  medicines           PrescriptionMedicine[]
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, createdAt])
+}
+
+model PrescriptionMedicine {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  name           String
+  dosage         String
+  frequency      String
+  duration       String
+  instructions   String?      @db.Text
+  createdAt      DateTime     @default(now())
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id            String      @id @default(uuid())
+  appointmentId String      @unique
+  patientId     String
+  doctorId      String
+  rating        Int
+  comment       String?     @db.Text
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient       User        @relation("ReviewPatient", fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User        @relation("ReviewDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, createdAt])
+  @@index([patientId, createdAt])
+}
+
+enum UserRole {
+  UNASSIGNED
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum TransactionType {
+  CREDIT_PURCHASE
+  APPOINTMENT_DEDUCTION
+  ADMIN_ADJUSTMENT
+  APPOINTMENT_REFUND
+}
+
+enum NotificationType {
+  APPOINTMENT_BOOKED
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  APPOINTMENT_RESCHEDULED
+  APPOINTMENT_REMINDER
+  NO_SHOW
+  DOCTOR_VERIFICATION
+  PAYOUT_STATUS
+  CREDIT_TRANSACTION
+  PRESCRIPTION_AVAILABLE
+}
+
+enum ReminderType {
+  TWENTY_FOUR_HOURS
+  THIRTY_MINUTES
+}
+
+enum PayoutStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+  PROCESSED
+}

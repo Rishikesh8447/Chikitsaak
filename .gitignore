@@ -39,3 +39,25 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# clerk configuration (can include secrets)
+/.clerk/
+
+/lib/private.key
+/lib/generated/prisma
+
+
+# Prisma recovery/repair backups
+prisma/.migration-recovery-backup-*/
+prisma/.migration-repair-backup-*/
+
+# Next.js
+.next/
+
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env*.local
