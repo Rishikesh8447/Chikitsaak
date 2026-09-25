@@ -4,6 +4,7 @@ import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { createAppointmentNotificationPair } from "@/lib/notifications";
+import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";
 
 /**
  * Set doctor's availability slots
@@ -21,6 +22,7 @@ export async function setAvailabilitySlots(formData) {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 
@@ -56,13 +58,22 @@ export async function setAvailabilitySlots(formData) {
       });
       if (overlaps) throw new Error("This availability period overlaps an existing period");
       const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] }, startTime: { lt: end }, endTime: { gt: start } } });
-      if (appointments.some((appointment) => appointment.startTime < start || appointment.endTime > end)) throw new Error("Availability cannot invalidate an existing appointment");
+      const coversAppointment = (appointment) => {
+        const appointmentStart = new Date(appointment.startTime);
+        const appointmentEnd = new Date(appointment.endTime);
+        const appointmentStartMinutes = appointmentStart.getHours() * 60 + appointmentStart.getMinutes();
+        const appointmentEndMinutes = appointmentEnd.getHours() * 60 + appointmentEnd.getMinutes();
+        const withinWindow = startMinutes <= appointmentStartMinutes && endMinutes >= appointmentEndMinutes;
+        return withinWindow && appointmentStart >= start && appointmentEnd <= end;
+      };
+      if (!appointments.every(coversAppointment)) throw new Error("Availability cannot invalidate an existing appointment");
       return tx.availability.create({ data: { doctorId: doctor.id, startTime: start, endTime: end, dayOfWeek, status: "AVAILABLE" } });
     }, { isolationLevel: "Serializable" });
 
     revalidatePath("/doctor");
     return { success: true, slot: newSlot };
   } catch (error) {
+    if (error instanceof Error && error.message === "Availability cannot invalidate an existing appointment") throw error;
     console.error("Failed to set availability slots:", error);
     throw new Error("Failed to save availability. Please try again.");
   }
@@ -83,6 +94,7 @@ export async function getDoctorAvailability() {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 
@@ -121,6 +133,7 @@ export async function getDoctorAppointments() {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 
@@ -171,6 +184,7 @@ export async function cancelAppointment(formData) {
     if (!user) {
       throw new Error("User not found");
     }
+    if (user.role === "DOCTOR" && user.verificationStatus !== "VERIFIED") throw new Error("Doctor verification is required");
 
     const appointmentId = formData.get("appointmentId");
 
@@ -270,6 +284,7 @@ export async function addAppointmentNotes(formData) {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 
@@ -329,6 +344,7 @@ export async function markAppointmentCompleted(formData) {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 
@@ -390,12 +406,6 @@ export async function markAppointmentCompleted(formData) {
   }
 }
 
-const STATUS_TRANSITIONS = {
-  SCHEDULED: ["CONFIRMED", "CANCELLED"],
-  CONFIRMED: ["IN_PROGRESS", "CANCELLED", "NO_SHOW"],
-  IN_PROGRESS: ["COMPLETED"],
-};
-
 export async function updateAppointmentStatus(formData) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -403,12 +413,17 @@ export async function updateAppointmentStatus(formData) {
   const nextStatus = formData.get("status");
   if (typeof appointmentId !== "string" || typeof nextStatus !== "string") throw new Error("Invalid status update");
   const actor = await db.user.findUnique({ where: { clerkUserId: userId } });
-  if (!actor || !["DOCTOR", "ADMIN"].includes(actor.role)) throw new Error("Not authorized");
-  const appointment = await db.appointment.findUnique({ where: { id: appointmentId, ...(actor.role === "DOCTOR" ? { doctorId: actor.id } : {}) } });
-  if (!appointment || !STATUS_TRANSITIONS[appointment.status]?.includes(nextStatus)) throw new Error("Invalid appointment status transition");
-  if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && new Date() < appointment.endTime) throw new Error("This appointment has not ended yet");
+  if (!actor || actor.role !== "DOCTOR" || actor.verificationStatus !== "VERIFIED") throw new Error("Not authorized");
+  if (!["CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"].includes(nextStatus)) throw new Error("Invalid appointment status");
+  const appointment = await db.appointment.findUnique({ where: { id: appointmentId, doctorId: actor.id } });
+  if (!appointment || !canTransitionAppointment(appointment.status, nextStatus)) throw new Error("Invalid appointment status transition");
+  const now = new Date();
+  if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && now < appointment.endTime) throw new Error("This appointment has not ended yet");
+  if (nextStatus === "IN_PROGRESS" && (now < new Date(appointment.startTime) || now >= new Date(appointment.endTime))) throw new Error("Consultation can only start during the appointment time");
   const updated = await db.$transaction(async (tx) => {
-    const changed = await tx.appointment.update({ where: { id: appointment.id, status: appointment.status }, data: { status: nextStatus } });
+    const changedResult = await tx.appointment.updateMany({ where: { id: appointment.id, status: appointment.status }, data: { status: nextStatus } });
+    if (changedResult.count !== 1) throw new Error("Appointment status changed; refresh and try again");
+    const changed = await tx.appointment.findUnique({ where: { id: appointment.id } });
     if (nextStatus === "CONFIRMED") await createAppointmentNotificationPair(tx, changed, { type: "APPOINTMENT_CONFIRMED", title: "Appointment confirmed", patientMessage: "Your appointment has been confirmed.", doctorMessage: "Appointment confirmed.", key: `appointment:${changed.id}:confirmed` });
     if (nextStatus === "NO_SHOW") await createAppointmentNotificationPair(tx, changed, { type: "NO_SHOW", title: "Appointment marked no-show", patientMessage: "Your appointment was marked as no-show.", doctorMessage: "The appointment was marked as no-show.", key: `appointment:${changed.id}:no-show` });
     return changed;
@@ -422,13 +437,26 @@ export async function removeAvailabilitySlot(formData) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
   const slotId = formData.get("slotId");
-  const doctor = await db.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR" } });
+  const doctor = await db.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
   if (!doctor || typeof slotId !== "string") throw new Error("Invalid availability request");
-  const slot = await db.availability.findUnique({ where: { id: slotId, doctorId: doctor.id } });
-  if (!slot) throw new Error("Availability period not found");
-  const occupied = await db.appointment.findFirst({ where: { doctorId: doctor.id, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] }, startTime: { lt: slot.endTime }, endTime: { gt: slot.startTime } } });
-  if (occupied) throw new Error("This period contains a booked appointment and cannot be removed");
-  await db.availability.delete({ where: { id: slot.id } });
+  await db.$transaction(async (tx) => {
+    const slot = await tx.availability.findUnique({ where: { id: slotId, doctorId: doctor.id } });
+    if (!slot) throw new Error("Availability period not found");
+    const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, select: { startTime: true, endTime: true } });
+    const slotStart = slot.startTime.getHours() * 60 + slot.startTime.getMinutes();
+    const slotEnd = slot.endTime.getHours() * 60 + slot.endTime.getMinutes();
+    const hasMatchingAppointment = appointments.some((appointment) => {
+      const startsAt = new Date(appointment.startTime);
+      const endsAt = new Date(appointment.endTime);
+      if (slot.dayOfWeek !== null && startsAt.getDay() !== slot.dayOfWeek) return false;
+      if (slot.blockedDate && startsAt.toDateString() !== slot.blockedDate.toDateString()) return false;
+      const appointmentStart = startsAt.getHours() * 60 + startsAt.getMinutes();
+      const appointmentEnd = endsAt.getHours() * 60 + endsAt.getMinutes();
+      return appointmentStart < slotEnd && appointmentEnd > slotStart;
+    });
+    if (hasMatchingAppointment) throw new Error("This period contains a booked appointment and cannot be removed");
+    await tx.availability.delete({ where: { id: slot.id } });
+  }, { isolationLevel: "Serializable" });
   revalidatePath("/doctor");
   return { success: true };
 }

@@ -1,10 +1,10 @@
-"use server";
+﻿"use server";
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { Vonage } from "@vonage/server-sdk";
-import { addDays, addMinutes, format, isBefore, endOfDay } from "date-fns";
+import { addDays, addMinutes, format, endOfDay } from "date-fns";
 import { Auth } from "@vonage/auth";
 import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { resolveDoctorPublicNames } from "@/lib/doctor-name";
@@ -134,6 +134,7 @@ export async function authorizeVideoCall(formData) {
     if (!user) {
       throw new Error("User not found");
     }
+    if (user.role === "DOCTOR" && user.verificationStatus !== "VERIFIED") throw new Error("Doctor verification is required to join calls");
 
     const appointmentId = formData.get("appointmentId");
 
@@ -174,6 +175,10 @@ export async function authorizeVideoCall(formData) {
     }
 
     await ensureVideoSession(appointment);
+    if (appointment.status === "CONFIRMED" && appointment.doctorId === user.id && now >= appointmentTime) {
+      const started = await db.appointment.updateMany({ where: { id: appointment.id, status: "CONFIRMED" }, data: { status: "IN_PROGRESS" } });
+      if (started.count === 1) revalidatePath("/appointments");
+    }
     return { success: true };
   } catch (error) {
     throw new Error(error instanceof Error && ["Unauthorized", "User not found", "Appointment ID is required", "Appointment not found", "You are not authorized to join this call", "Waiting for doctor confirmation", "This appointment is not available for video consultation", "The call will be available 30 minutes before the scheduled time", "Video session provisioning failed", "Video session could not be saved"].includes(error.message) ? error.message : "Unable to authorize video call. Please try again.");
@@ -187,11 +192,16 @@ export async function getVideoCallCredentials(appointmentId) {
   const appointment = await db.appointment.findUnique({ where: { id: appointmentId } });
   console.info("Video credentials debug", { appointmentId, status: appointment?.status, hasSessionId: Boolean(appointment?.videoSessionId), hasVonageAppId: Boolean(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID), hasPrivateKey: Boolean(process.env.VONAGE_PRIVATE_KEY) });
   if (!user || !appointment || (appointment.doctorId !== user.id && appointment.patientId !== user.id)) throw new Error("You are not authorized to join this call");
+  if (user.role === "DOCTOR" && user.verificationStatus !== "VERIFIED") throw new Error("Doctor verification is required to join calls");
   if (!VIDEO_STATUSES.includes(appointment.status)) throw new Error(appointment.status === "SCHEDULED" ? "Waiting for doctor confirmation" : "This appointment is not available for video consultation");
   const now = new Date();
   if ((new Date(appointment.startTime) - now) / 60000 > 30) throw new Error("The video call is not currently available");
   if (now >= new Date(appointment.endTime)) throw new Error("This appointment has ended");
   const sessionId = await ensureVideoSession(appointment);
+  if (appointment.status === "CONFIRMED" && appointment.doctorId === user.id && now >= new Date(appointment.startTime)) {
+    const started = await db.appointment.updateMany({ where: { id: appointment.id, status: "CONFIRMED" }, data: { status: "IN_PROGRESS" } });
+    if (started.count === 1) revalidatePath("/appointments");
+  }
   const token = getVonage().video.generateClientToken(sessionId, { role: "publisher", expireTime: Math.floor(new Date(appointment.endTime).getTime() / 1000) + 60 * 60, data: JSON.stringify({ name: user.name || "Participant", role: user.role, userId: user.id }) });
   return { success: true, videoSessionId: sessionId, token, appId: process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID };
 }
@@ -234,131 +244,6 @@ export async function getDoctorById(doctorId) {
 /**
  * Get available time slots for booking for the next 4 days
  */
-export async function legacyGetAvailableTimeSlots(doctorId) {
-  try {
-    // Validate doctor existence and verification
-    const doctor = await db.user.findUnique({
-      where: {
-        id: doctorId,
-        role: "DOCTOR",
-        verificationStatus: "VERIFIED",
-      },
-    });
-
-    if (!doctor) {
-      throw new Error("Doctor not found or not verified");
-    }
-
-    // Fetch a single availability record
-    const availability = await db.availability.findFirst({
-      where: {
-        doctorId: doctor.id,
-        status: "AVAILABLE",
-      },
-    });
-
-    if (!availability) {
-      throw new Error("No availability set by doctor");
-    }
-
-    // Get the next 4 days
-    const now = new Date();
-    const days = [now, addDays(now, 1), addDays(now, 2), addDays(now, 3)];
-
-    // Fetch existing appointments for the doctor over the next 4 days
-    const lastDay = endOfDay(days[3]);
-    const existingAppointments = await db.appointment.findMany({
-      where: {
-        doctorId: doctor.id,
-        status: "SCHEDULED",
-        startTime: {
-          lte: lastDay,
-        },
-      },
-    });
-
-    const availableSlotsByDay = {};
-
-    // For each of the next 4 days, generate available slots
-    for (const day of days) {
-      const dayString = format(day, "yyyy-MM-dd");
-      availableSlotsByDay[dayString] = [];
-
-      // Create a copy of the availability start/end times for this day
-      const availabilityStart = new Date(availability.startTime);
-      const availabilityEnd = new Date(availability.endTime);
-
-      // Set the day to the current day we're processing
-      availabilityStart.setFullYear(
-        day.getFullYear(),
-        day.getMonth(),
-        day.getDate()
-      );
-      availabilityEnd.setFullYear(
-        day.getFullYear(),
-        day.getMonth(),
-        day.getDate()
-      );
-
-      let current = new Date(availabilityStart);
-      const end = new Date(availabilityEnd);
-
-      while (
-        isBefore(addMinutes(current, 30), end) ||
-        +addMinutes(current, 30) === +end
-      ) {
-        const next = addMinutes(current, 30);
-
-        // Skip past slots
-        if (isBefore(current, now)) {
-          current = next;
-          continue;
-        }
-
-        const overlaps = existingAppointments.some((appointment) => {
-          const aStart = new Date(appointment.startTime);
-          const aEnd = new Date(appointment.endTime);
-
-          return (
-            (current >= aStart && current < aEnd) ||
-            (next > aStart && next <= aEnd) ||
-            (current <= aStart && next >= aEnd)
-          );
-        });
-
-        if (!overlaps) {
-          availableSlotsByDay[dayString].push({
-            startTime: current.toISOString(),
-            endTime: next.toISOString(),
-            formatted: `${format(current, "h:mm a")} - ${format(
-              next,
-              "h:mm a"
-            )}`,
-            day: format(current, "EEEE, MMMM d"),
-          });
-        }
-
-        current = next;
-      }
-    }
-
-    // Convert to array of slots grouped by day for easier consumption by the UI
-    const result = Object.entries(availableSlotsByDay).map(([date, slots]) => ({
-      date,
-      displayDate:
-        slots.length > 0
-          ? slots[0].day
-          : format(new Date(date), "EEEE, MMMM d"),
-      slots,
-    }));
-
-    return { days: result };
-  } catch (error) {
-    console.error("Failed to fetch available slots:", error);
-    throw new Error("Failed to fetch available time slots. Please try again.");
-  }
-}
-
 export async function getAvailableTimeSlots(doctorId, startDate) {
   const doctor = await db.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
   if (!doctor) throw new Error("Doctor not found or not verified");

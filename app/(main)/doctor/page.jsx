@@ -13,27 +13,22 @@ import { PageHeader } from "@/components/page-header";
 
 export default async function DoctorDashboardPage({ searchParams }) {
   const user = await getCurrentUser();
-  const params = await searchParams;
-  const range = params?.range || 30;
-
-  const [appointmentsData, availabilityData, earningsData, payoutsData, analyticsData] =
-    await Promise.all([
-      getDoctorAppointments(),
-      getDoctorAvailability(),
-      getDoctorEarnings(),
-      getDoctorPayouts(),
-      getDoctorAnalytics(range),
-    ]);
-
-  // Redirect if not a doctor
-  if (user?.role !== "DOCTOR") {
+  if (!user || user.role !== "DOCTOR") {
     redirect("/onboarding");
   }
-
-  // If already verified, redirect to dashboard
   if (user?.verificationStatus !== "VERIFIED") {
     redirect("/doctor/verification");
   }
+
+  const params = await searchParams;
+  const range = params?.range || 30;
+  const [appointmentsData, availabilityData, earningsData, payoutsData, analyticsData] = await Promise.all([
+    getDoctorAppointments(),
+    getDoctorAvailability(),
+    getDoctorEarnings(),
+    getDoctorPayouts(),
+    getDoctorAnalytics(range),
+  ]);
 
   const doctorAppointments = appointmentsData.appointments || [];
   const today = new Date();

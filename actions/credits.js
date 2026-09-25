@@ -11,8 +11,6 @@ const PLAN_CREDITS = {
   premium: 24, // Premium plan: 24 credits per month
 };
 
-// Each appointment costs 2 credits
-const APPOINTMENT_CREDIT_COST = 2;
 
 /**
  * Checks user's subscription and allocates monthly credits if needed
@@ -91,64 +89,6 @@ export async function checkAndAllocateCredits() {
       error.message
     );
     return null;
-  }
-}
-
-/**
- * Deducts credits for booking an appointment
- */
-export async function deductCreditsForAppointment(doctorId) {
-  const { userId: clerkUserId } = await auth();
-  if (!clerkUserId) return { success: false, error: "Unauthorized" };
-  try {
-    const result = await db.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { clerkUserId } });
-      const doctor = await tx.user.findUnique({ where: { id: doctorId } });
-      if (!user || user.role !== "PATIENT" || user.clerkUserId !== clerkUserId) throw new Error("Patient not found");
-      if (!doctor || doctor.role !== "DOCTOR") throw new Error("Doctor not found");
-      const updatedUser = await tx.user.updateMany({
-        where: { id: user.id, credits: { gte: APPOINTMENT_CREDIT_COST } },
-        data: { credits: { decrement: APPOINTMENT_CREDIT_COST } },
-      });
-      if (updatedUser.count !== 1) throw new Error("Insufficient credits to book an appointment");
-
-      await tx.creditTransaction.create({
-        data: {
-          userId: user.id,
-          amount: -APPOINTMENT_CREDIT_COST,
-          type: "APPOINTMENT_DEDUCTION",
-        },
-      });
-
-      await tx.creditTransaction.create({
-        data: {
-          userId: doctor.id,
-          amount: APPOINTMENT_CREDIT_COST,
-          type: "APPOINTMENT_DEDUCTION", // Using same type for consistency
-        },
-      });
-
-      await tx.user.update({
-        where: {
-          id: doctor.id,
-        },
-        data: {
-          credits: {
-            increment: APPOINTMENT_CREDIT_COST,
-          },
-        },
-      });
-
-      return updatedUser;
-    });
-
-    return { success: true, user: result };
-  } catch (error) {
-    console.error("Failed to deduct credits:", error instanceof Error ? error.message : "Unknown error");
-    const message = error instanceof Error && ["Insufficient credits to book an appointment", "Patient not found", "Doctor not found"].includes(error.message)
-      ? error.message
-      : "Unable to update credits right now";
-    return { success: false, error: message };
   }
 }
 

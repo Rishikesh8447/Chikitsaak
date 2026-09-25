@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { approvePayout } from "@/actions/admin";
+import { approvePayout, rejectPayout } from "@/actions/admin";
 import useFetch from "@/hooks/use-fetch";
 import { toast } from "sonner";
 import { BarLoader } from "react-spinners";
@@ -40,6 +40,7 @@ export function PendingPayouts({ payouts }) {
 
   // Custom hook for approve payout server action
   const { loading, data, fn: submitApproval } = useFetch(approvePayout);
+  const { loading: rejecting, data: rejectData, fn: submitRejection } = useFetch(rejectPayout);
 
   // Handle view details
   const handleViewDetails = (payout) => {
@@ -69,6 +70,14 @@ export function PendingPayouts({ payouts }) {
       toast.success("Payout approved successfully!");
     }
   }, [data]);
+
+  useEffect(() => { if (rejectData?.success) toast.success("Payout declined and reserved credits returned."); }, [rejectData]);
+  const handleRejectPayout = async (payout) => {
+    if (rejecting || !window.confirm(`Decline Dr. ${payout.doctor.name}'s payout and return ${payout.credits} reserved credits?`)) return;
+    const formData = new FormData();
+    formData.set("payoutId", payout.id);
+    await submitRejection(formData);
+  };
 
   const closeDialogs = () => {
     setSelectedPayout(null);
@@ -159,6 +168,7 @@ export function PendingPayouts({ payouts }) {
                             <Check className="h-4 w-4 mr-1" />
                             Approve
                           </Button>
+                          <Button type="button" variant="outline" size="sm" disabled={rejecting} onClick={() => handleRejectPayout(payout)}>Decline</Button>
                         </div>
                       </div>
                     </div>
@@ -270,18 +280,6 @@ export function PendingPayouts({ payouts }) {
                 </div>
               </div>
 
-              {/* Warning if insufficient credits */}
-              {selectedPayout.doctor.credits < selectedPayout.credits && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Warning: Doctor currently has only{" "}
-                    {selectedPayout.doctor.credits} credits but this payout
-                    requires {selectedPayout.credits} credits. The payout cannot
-                    be processed.
-                  </AlertDescription>
-                </Alert>
-              )}
             </div>
 
             <DialogFooter>
@@ -294,9 +292,6 @@ export function PendingPayouts({ payouts }) {
               </Button>
               <Button
                 onClick={() => handleApprovePayout(selectedPayout)}
-                disabled={
-                  selectedPayout.doctor.credits < selectedPayout.credits
-                }
                 className="bg-emerald-600 hover:bg-emerald-700"
               >
                 <Check className="h-4 w-4 mr-1" />
@@ -330,8 +325,8 @@ export function PendingPayouts({ payouts }) {
                   This action will:
                   <ul className="mt-2 space-y-1 list-disc pl-4">
                     <li>
-                      Deduct {selectedPayout.credits} credits from Dr.{" "}
-                      {selectedPayout.doctor.name}&apos;s account
+                      Pay out {selectedPayout.credits} credits reserved when Dr.{" "}
+                      {selectedPayout.doctor.name} requested the payout
                     </li>
                     <li>Mark the payout as PROCESSED</li>
                     <li>This action cannot be undone</li>

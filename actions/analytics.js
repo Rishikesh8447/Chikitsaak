@@ -41,14 +41,14 @@ function statusCounts(records) {
 async function currentUser() {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
-  const user = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true } });
+  const user = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true, verificationStatus: true } });
   if (!user) throw new Error("User not found");
   return user;
 }
 
 export async function getDoctorAnalytics(range) {
   const user = await currentUser();
-  if (user.role !== "DOCTOR") throw new Error("Only doctors can access doctor analytics");
+  if (user.role !== "DOCTOR" || user.verificationStatus !== "VERIFIED") throw new Error("Only verified doctors can access doctor analytics");
   const window = rangeWindow(range);
   const where = { doctorId: user.id, startTime: { gte: window.from, lte: window.to } };
   const appointments = await db.appointment.findMany({ where, select: { startTime: true, status: true, patientId: true } });

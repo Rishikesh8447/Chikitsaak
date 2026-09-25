@@ -38,6 +38,7 @@ function parseMedicines(value) {
 export async function createPrescription(formData) {
   const doctor = await authenticatedUser();
   if (doctor.role !== "DOCTOR") throw new Error("Only doctors can create prescriptions");
+  if (doctor.verificationStatus !== "VERIFIED") throw new Error("Doctor verification is required to create prescriptions");
   const appointmentId = formData.get("appointmentId");
   if (typeof appointmentId !== "string") throw new Error("Appointment is required");
   const diagnosis = requiredText(formData.get("diagnosis"), "Diagnosis", 3000);

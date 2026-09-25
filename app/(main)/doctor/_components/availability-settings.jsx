@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import {
   Card,
@@ -12,17 +13,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, Plus, Loader2, AlertCircle } from "lucide-react";
+import { Clock, Plus, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { format } from "date-fns";
-import { setAvailabilitySlots } from "@/actions/doctor";
+import { setAvailabilitySlots, removeAvailabilitySlot } from "@/actions/doctor";
 import useFetch from "@/hooks/use-fetch";
 import { toast } from "sonner";
 
+const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 export function AvailabilitySettings({ slots }) {
   const [showForm, setShowForm] = useState(false);
+  const router = useRouter();
 
   // Custom hook for server action
   const { loading, fn: submitSlots, data } = useFetch(setAvailabilitySlots);
+  const { loading: removing, fn: submitRemoval, data: removalData } = useFetch(removeAvailabilitySlot);
 
   // React Hook Form
   const {
@@ -56,8 +61,6 @@ export function AvailabilitySettings({ slots }) {
 
     const formData = new FormData();
 
-    const today = new Date().toISOString().split("T")[0];
-
     // Create date objects
     const startDate = createLocalDateFromTime(data.startTime);
     const endDate = createLocalDateFromTime(data.endTime);
@@ -81,6 +84,8 @@ export function AvailabilitySettings({ slots }) {
       toast.success("Availability slots updated successfully");
     }
   }, [data]);
+  useEffect(() => { if (removalData?.success) { toast.success("Availability period removed"); router.refresh(); } }, [removalData, router]);
+  const removeSlot = async (slotId) => { const formData = new FormData(); formData.set("slotId", slotId); await submitRemoval(formData); };
 
   // Format time string for display
   const formatTimeString = (dateString) => {
@@ -99,7 +104,7 @@ export function AvailabilitySettings({ slots }) {
           Availability Settings
         </CardTitle>
         <CardDescription>
-          Set your daily availability for patient appointments
+          Recurring hours have no saved doctor timezone; the app may interpret them differently across timezones.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -132,9 +137,10 @@ export function AvailabilitySettings({ slots }) {
                           {formatTimeString(slot.endTime)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {slot.status === "BLOCKED" ? "Blocked" : "Available"}
+                          {slot.status === "BLOCKED" ? "Blocked" : "Available"} · {slot.dayOfWeek === null ? "Every day" : weekdays[slot.dayOfWeek]}
                         </p>
                       </div>
+                      <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${slot.dayOfWeek === null ? "every day" : weekdays[slot.dayOfWeek]} availability`} disabled={removing} onClick={() => removeSlot(slot.id)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   ))}
                 </div>
@@ -155,7 +161,7 @@ export function AvailabilitySettings({ slots }) {
             className="space-y-4 border-t border-border pt-5"
           >
             <h3 className="text-base font-medium text-foreground mb-2">
-              Set Daily Availability
+              Set Recurring Availability
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

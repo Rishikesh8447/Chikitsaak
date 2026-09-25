@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/prisma";
-import { getAvailableTimeSlots } from "./appointments";
+import { addMinutes, endOfDay, format } from "date-fns";
 import { resolveDoctorPublicNames } from "@/lib/doctor-name";
 
 const publicDoctorSelect = {
@@ -63,10 +63,29 @@ export async function searchDoctors({ query = "", specialty = "", city = "", sta
     select: publicDoctorSelect,
   });
   if (!availableToday) return { doctors: await resolveDoctorPublicNames(doctors) };
-  const today = new Date().toISOString();
-  const available = await Promise.all(doctors.map(async (doctor) => {
-    const result = await getAvailableTimeSlots(doctor.id, today);
-    return result.days[0]?.slots.length ? doctor : null;
-  }));
+  const now = new Date();
+  const firstDay = new Date(now);
+  firstDay.setHours(0, 0, 0, 0);
+  const lastDay = endOfDay(firstDay);
+  const doctorIds = doctors.map((doctor) => doctor.id);
+  const [availability, appointments] = await Promise.all([
+    db.availability.findMany({ where: { doctorId: { in: doctorIds }, status: "AVAILABLE" } }),
+    db.appointment.findMany({ where: { doctorId: { in: doctorIds }, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] }, startTime: { lt: lastDay }, endTime: { gt: firstDay } }, select: { doctorId: true, startTime: true, endTime: true } }),
+  ]);
+  const available = doctors.filter((doctor) => {
+    const windows = availability.filter((window) => window.doctorId === doctor.id && (window.dayOfWeek === null || window.dayOfWeek === now.getDay()) && (!window.blockedDate || format(new Date(window.blockedDate), "yyyy-MM-dd") !== format(now, "yyyy-MM-dd")));
+    return windows.some((window) => {
+      const start = new Date(firstDay);
+      start.setHours(window.startTime.getHours(), window.startTime.getMinutes(), 0, 0);
+      const end = new Date(firstDay);
+      end.setHours(window.endTime.getHours(), window.endTime.getMinutes(), 0, 0);
+      for (let slotStart = start; slotStart < end; slotStart = addMinutes(slotStart, 30)) {
+        const slotEnd = addMinutes(slotStart, 30);
+        if (slotStart <= now || slotEnd > end) continue;
+        if (!appointments.some((appointment) => appointment.doctorId === doctor.id && appointment.startTime < slotEnd && appointment.endTime > slotStart)) return true;
+      }
+      return false;
+    });
+  });
   return { doctors: await resolveDoctorPublicNames(available.filter(Boolean)) };
 }

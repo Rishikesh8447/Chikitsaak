@@ -35,7 +35,7 @@ export default function ThemeToggle() {
       title={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
       className="inline-flex size-9 items-center justify-center rounded-full border border-border bg-background text-lg text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      {resolvedTheme === "dark" ? "☀️" : "🌙"}
+      {resolvedTheme === "dark" ? "☀" : "☾"}
     </button>
   );
 }

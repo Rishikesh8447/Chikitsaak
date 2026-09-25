@@ -624,7 +624,7 @@ export function AppointmentCard({
               )}
 
               {/* Cancel Button - For scheduled appointments */}
-            {["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(appointment.status) && (
+            {["SCHEDULED", "CONFIRMED"].includes(appointment.status) && (
                 <Button
                   variant="outline"
                   onClick={handleCancelAppointment}

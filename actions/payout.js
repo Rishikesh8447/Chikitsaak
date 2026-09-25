@@ -19,48 +19,30 @@ export async function requestPayout(formData) {
   }
 
   try {
-    const doctor = await db.user.findUnique({
-      where: {
-        clerkUserId: userId,
-        role: "DOCTOR",
-      },
-    });
-
-    if (!doctor) {
-      throw new Error("Doctor not found");
-    }
-
     const paypalEmail = formData.get("paypalEmail");
-
-    if (!paypalEmail) {
+    if (typeof paypalEmail !== "string" || !paypalEmail.trim() || paypalEmail.length > 254) {
       throw new Error("PayPal email is required");
     }
-
-    const creditCount = doctor.credits;
-
-    if (creditCount === 0) {
-      throw new Error("No credits available for payout");
-    }
-
-    if (creditCount < 1) {
-      throw new Error("Minimum 1 credit required for payout");
-    }
-
-    const totalAmount = creditCount * CREDIT_VALUE;
-    const platformFee = creditCount * PLATFORM_FEE_PER_CREDIT;
-    const netAmount = creditCount * DOCTOR_EARNINGS_PER_CREDIT;
-
     const payout = await db.$transaction(async (tx) => {
+      const doctor = await tx.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
+      if (!doctor) throw new Error("Doctor not found or not verified");
       const existing = await tx.payout.findFirst({ where: { doctorId: doctor.id, status: "PROCESSING" } });
       if (existing) throw new Error("You already have a pending payout request");
-      return tx.payout.create({ data: { doctorId: doctor.id, amount: totalAmount, credits: creditCount, platformFee, netAmount, paypalEmail, status: "PROCESSING" } });
+      const creditCount = doctor.credits;
+      if (creditCount < 1) throw new Error("No credits available for payout");
+      const reserved = await tx.user.updateMany({ where: { id: doctor.id, credits: creditCount }, data: { credits: 0 } });
+      if (reserved.count !== 1) throw new Error("Credit balance changed. Please try again.");
+      const payout = await tx.payout.create({ data: { doctorId: doctor.id, amount: creditCount * CREDIT_VALUE, credits: creditCount, platformFee: creditCount * PLATFORM_FEE_PER_CREDIT, netAmount: creditCount * DOCTOR_EARNINGS_PER_CREDIT, paypalEmail: paypalEmail.trim(), status: "PROCESSING" } });
+      await tx.creditTransaction.create({ data: { userId: doctor.id, amount: -creditCount, type: "ADMIN_ADJUSTMENT", allocationKey: `payout:${payout.id}:credit-reservation` } });
+      return payout;
     }, { isolationLevel: "Serializable" });
 
     revalidatePath("/doctor");
     return { success: true, payout };
   } catch (error) {
     console.error("Failed to request payout:", error);
-    throw new Error("Failed to request payout. Please try again.");
+    const message = error instanceof Error && ["PayPal email is required", "Doctor not found or not verified", "You already have a pending payout request", "No credits available for payout", "Credit balance changed. Please try again."].includes(error.message) ? error.message : "Failed to request payout. Please try again.";
+    throw new Error(message);
   }
 }
 
@@ -79,6 +61,7 @@ export async function getDoctorPayouts() {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 
@@ -116,6 +99,7 @@ export async function getDoctorEarnings() {
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
+        verificationStatus: "VERIFIED",
       },
     });
 

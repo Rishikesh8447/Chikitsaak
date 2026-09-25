@@ -70,15 +70,35 @@ const role = formData.get("role");
         revalidatePath("/");
       return { success: true, redirect: "/doctor/verification" };
     }
-    
-
-}
-    catch (error) {
-         console.error("Failed to set user role:", error);
-    throw new Error("Failed to update user profile. Please try again.");
+    } catch (error) {
+      console.error("Failed to set user role:", error);
+      throw new Error("Failed to update user profile. Please try again.");
     }
 }
 
+/** Resubmit an existing rejected doctor's profile without changing their role. */
+export async function resubmitDoctorProfile(formData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  const user = await db.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR" } });
+  if (!user || user.verificationStatus !== "REJECTED") throw new Error("Only rejected doctor profiles can be resubmitted");
+  const specialty = formData.get("specialty")?.toString().trim();
+  const experienceValue = formData.get("experience")?.toString().trim();
+  const experience = Number(experienceValue);
+  const credentialUrl = formData.get("credentialUrl")?.toString().trim();
+  const description = formData.get("description")?.toString().trim();
+  const city = formData.get("city")?.toString().trim();
+  const state = formData.get("state")?.toString().trim();
+  const country = formData.get("country")?.toString().trim();
+  if (!specialty || !experienceValue || !Number.isInteger(experience) || experience < 0 || experience > 80 || !credentialUrl || !description || !city || !state || !country) throw new Error("Complete all professional and location fields before resubmitting");
+  let credential;
+  try { credential = new URL(credentialUrl); } catch { throw new Error("Enter a valid credential URL"); }
+  if (!["https:", "http:"].includes(credential.protocol)) throw new Error("Enter a valid credential URL");
+  await db.user.update({ where: { id: user.id, verificationStatus: "REJECTED" }, data: { specialty, experience, credentialUrl, description, city, state, country, verificationStatus: "PENDING" } });
+  revalidatePath("/doctor/verification");
+  revalidatePath("/admin");
+  return { success: true, redirect: "/doctor/verification" };
+}
 /*Gets the current user's complete profile information
  */
 export async function getCurrentUser() {

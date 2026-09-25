@@ -145,7 +145,8 @@ export async function updateDoctorStatus(formData) {
         verificationStatus: status,
       },
     });
-    await db.notification.createMany({ data: [{ userId: doctorId, type: "DOCTOR_VERIFICATION", title: "Doctor verification updated", message: `Your doctor verification status is now ${status.toLowerCase()}.`, dedupeKey: `doctor:${doctorId}:verification:${status}` }], skipDuplicates: true });
+    if (status === "REJECTED") await db.notification.createMany({ data: [{ userId: doctorId, type: "DOCTOR_VERIFICATION", title: "Doctor verification updated", message: "Your doctor verification status is now rejected. Please update your profile and resubmit for review.", dedupeKey: `doctor:${doctorId}:verification:REJECTED` }], skipDuplicates: true });
+    else await db.notification.createMany({ data: [{ userId: doctorId, type: "DOCTOR_VERIFICATION", title: "Doctor verification updated", message: `Your doctor verification status is now ${status.toLowerCase()}.`, dedupeKey: `doctor:${doctorId}:verification:${status}` }], skipDuplicates: true });
 
     revalidatePath("/admin");
     return { success: true };
@@ -247,21 +248,15 @@ export async function approvePayout(formData) {
     await db.$transaction(async (tx) => {
       const payout = await tx.payout.findFirst({ where: { id: payoutId, status: "PROCESSING" }, include: { doctor: true } });
       if (!payout) throw new Error("Payout request not found or already processed");
-      // Update payout status to PROCESSED
-      const reserved = await tx.user.updateMany({ where: { id: payout.doctorId, credits: { gte: payout.credits } }, data: { credits: { decrement: payout.credits } } });
-      if (reserved.count !== 1) throw new Error("Doctor does not have enough available credits");
-      await tx.payout.update({ where: { id: payoutId }, data: { status: "PROCESSED", processedAt: new Date(), processedBy: admin?.id || "unknown" } });
+      const reservation = await tx.creditTransaction.findUnique({ where: { allocationKey: `payout:${payout.id}:credit-reservation` } });
+      if (!reservation) {
+        const legacyDebit = await tx.user.updateMany({ where: { id: payout.doctorId, credits: { gte: payout.credits } }, data: { credits: { decrement: payout.credits } } });
+        if (legacyDebit.count !== 1) throw new Error("Doctor does not have enough available credits");
+        await tx.creditTransaction.create({ data: { userId: payout.doctorId, amount: -payout.credits, type: "ADMIN_ADJUSTMENT", allocationKey: `payout:${payout.id}:reserved-credit-debit` } });
+      }
+      const changed = await tx.payout.updateMany({ where: { id: payoutId, status: "PROCESSING" }, data: { status: "PROCESSED", processedAt: new Date(), processedBy: admin?.id || "unknown" } });
+      if (changed.count !== 1) throw new Error("Payout request not found or already processed");
       await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "Payout status updated", message: "Your payout request was processed by an administrator.", dedupeKey: `payout:${payout.id}:processed` }], skipDuplicates: true });
-
-      // Deduct credits from doctor's account
-      // Create a transaction record for the deduction
-      await tx.creditTransaction.create({
-        data: {
-          userId: payout.doctorId,
-          amount: -payout.credits,
-          type: "ADMIN_ADJUSTMENT",
-        },
-      });
     });
 
     revalidatePath("/admin");
@@ -270,4 +265,29 @@ export async function approvePayout(formData) {
     console.error("Failed to approve payout:", error);
     throw new Error("Failed to approve payout. Please try again.");
   }
+}
+
+/** Reject a payout and release its reserved credits back to the doctor's balance. */
+export async function rejectPayout(formData) {
+  const isAdmin = await verifyAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+  const payoutId = formData.get("payoutId");
+  if (typeof payoutId !== "string" || !payoutId) throw new Error("Payout ID is required");
+  const { userId } = await auth();
+  const admin = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } });
+  await db.$transaction(async (tx) => {
+    const payout = await tx.payout.findFirst({ where: { id: payoutId, status: "PROCESSING" } });
+    if (!payout) throw new Error("Payout request not found or already processed");
+    const changed = await tx.payout.updateMany({ where: { id: payout.id, status: "PROCESSING" }, data: { status: "FAILED", processedAt: new Date(), processedBy: admin?.id || "unknown" } });
+    if (changed.count !== 1) throw new Error("Payout request not found or already processed");
+    const reservation = await tx.creditTransaction.findUnique({ where: { allocationKey: `payout:${payout.id}:credit-reservation` } });
+    if (reservation) {
+      await tx.user.update({ where: { id: payout.doctorId }, data: { credits: { increment: payout.credits } } });
+      await tx.creditTransaction.create({ data: { userId: payout.doctorId, amount: payout.credits, type: "ADMIN_ADJUSTMENT", allocationKey: `payout:${payout.id}:reserved-credit-release` } });
+    }
+    await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "Payout request declined", message: "Your payout request was declined and its credits were returned to your balance.", dedupeKey: `payout:${payout.id}:declined` }], skipDuplicates: true });
+  });
+  revalidatePath("/admin");
+  revalidatePath("/doctor");
+  return { success: true };
 }
