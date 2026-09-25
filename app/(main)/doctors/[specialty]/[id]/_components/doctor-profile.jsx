@@ -61,14 +61,14 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:grid-cols-3">
       {/* Left column - Doctor Photo and Quick Info (fixed on scroll) */}
       <div className="md:col-span-1">
         <div className="md:sticky md:top-24">
-          <Card className="border-border shadow-xs">
+          <Card className="border-border shadow-none">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
-                <div className="relative w-32 h-32 rounded-full overflow-hidden mb-4 bg-emerald-500/10 dark:bg-emerald-500/20">
+                <div className="relative mb-4 h-28 w-28 overflow-hidden rounded-full bg-primary/10">
                   {doctor.imageUrl ? (
                     <Image
                       src={doctor.imageUrl}
@@ -78,18 +78,18 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <User className="h-16 w-16 text-emerald-600 dark:text-emerald-400" />
+                      <User className="h-14 w-14 text-primary" />
                     </div>
                   )}
                 </div>
 
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
+                <h2 className="mb-1 text-xl font-semibold">
                   Dr. {doctorName}
                 </h2>
 
                 <Badge
                   variant="outline"
-                  className="bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 mb-4"
+                  className="mb-4 border-primary/30 bg-primary/10 text-primary"
                 >
                   {doctor.specialty}
                 </Badge>
@@ -114,7 +114,8 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
 
                 <Button
                   onClick={toggleBooking}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white mt-4 shadow-xs"
+                  variant={showBooking ? "ghost" : "default"}
+                  className="mt-4 w-full"
                 >
                   {showBooking ? (
                     <>
@@ -136,7 +137,7 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
 
       {/* Right column - Doctor Details and Booking Section */}
       <div className="md:col-span-2 space-y-6">
-        <Card className="border-border shadow-xs">
+        <Card className="border-border shadow-none">
           <CardHeader>
             <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">
               About Dr. {doctorName}
@@ -192,7 +193,7 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
         {/* Booking Section - Conditionally rendered */}
         {showBooking && (
           <div id="booking-section">
-            <Card className="border-border shadow-xs">
+            <Card className="border-border shadow-none">
               <CardHeader>
                 <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">
                   Book an Appointment

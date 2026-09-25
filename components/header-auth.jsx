@@ -7,7 +7,7 @@ export default function HeaderAuth() {
   return (
     <>
       <Show when="signed-out">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <SignInButton mode="modal">
             <Button variant="outline">Sign In</Button>
           </SignInButton>

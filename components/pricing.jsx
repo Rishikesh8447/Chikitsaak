@@ -28,27 +28,36 @@ const packages = [
 
 const Pricing = () => {
   return (
-    <Card className="border-emerald-900/30 shadow-lg bg-gradient-to-b from-emerald-950/30 to-transparent">
+    <Card className="border-emerald-500/20 bg-gradient-to-b from-emerald-500/8 via-card to-card shadow-lg dark:from-emerald-950/30">
       <CardContent className="p-6 md:p-8">
         <div className="mb-8 text-center">
-          <h2 className="text-2xl font-bold text-white">Consultation Credits</h2>
-          <p className="mt-2 text-muted-foreground">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Consultation Credits
+          </h2>
+          <p className="mt-2 text-slate-600 dark:text-slate-300">
             Each consultation uses 2 credits. Credits are managed by Chikitsaak.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           {packages.map((pkg) => (
-            <Card key={pkg.packageId} className="border-emerald-900/30 bg-background/50">
+            <Card
+              key={pkg.packageId}
+              className="border-emerald-500/15 bg-background/80 backdrop-blur dark:bg-background/50"
+            >
               <CardHeader>
-                <CardTitle className="text-white">{pkg.name}</CardTitle>
-                <p className="text-sm text-muted-foreground">{pkg.description}</p>
+                <CardTitle className="text-slate-900 dark:text-white">
+                  {pkg.name}
+                </CardTitle>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {pkg.description}
+                </p>
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold text-emerald-400">
                   {pkg.credits} credits
                 </p>
-                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-emerald-400" />
                     {Math.floor(pkg.credits / 2)} consultation{pkg.credits === 2 ? "" : "s"}
@@ -67,7 +76,7 @@ const Pricing = () => {
           ))}
         </div>
 
-        <p className="mt-6 text-center text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-300">
           Credit purchases are not connected to a payment provider yet. No payment
           or credit balance will be recorded from this page.
         </p>

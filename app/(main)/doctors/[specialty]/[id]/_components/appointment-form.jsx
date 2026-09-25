@@ -44,23 +44,23 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
         onComplete();
       }
     }
-  }, [data]);
+  }, [data, onComplete]);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-muted/20 p-4 rounded-lg border border-emerald-900/20 space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
         <div className="flex items-center">
-          <Calendar className="h-5 w-5 text-emerald-400 mr-2" />
+          <Calendar className="mr-2 h-5 w-5 text-primary" />
           <span className="text-white font-medium">
             {format(new Date(slot.startTime), "EEEE, MMMM d, yyyy")}
           </span>
         </div>
         <div className="flex items-center">
-          <Clock className="h-5 w-5 text-emerald-400 mr-2" />
+          <Clock className="mr-2 h-5 w-5 text-primary" />
           <span className="text-white">{slot.formatted}</span>
         </div>
         <div className="flex items-center">
-          <CreditCard className="h-5 w-5 text-emerald-400 mr-2" />
+          <CreditCard className="mr-2 h-5 w-5 text-primary" />
           <span className="text-muted-foreground">
             Cost: <span className="text-white font-medium">2 credits</span>
           </span>
@@ -76,7 +76,7 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
           placeholder="Please provide any details about your medical concern or what you'd like to discuss in the appointment..."
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="bg-background border-emerald-900/20 h-32"
+          className="h-32 bg-background"
         />
         <p className="text-sm text-muted-foreground">
           This information will be shared with the doctor before your
@@ -100,7 +100,7 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
         <Button
           type="submit"
           disabled={loading}
-          className="bg-emerald-600 hover:bg-emerald-700"
+          className="min-w-36"
         >
           {loading ? (
             <>

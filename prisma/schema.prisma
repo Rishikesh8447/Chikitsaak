@@ -19,26 +19,26 @@ model User {
   credits                Int                 @default(2)
   experience             Int?
   credentialUrl          String?
-  description            String?             @db.Text
+  description            String?
   verificationStatus     VerificationStatus? @default(PENDING)
   specialty              String?
+  bloodGroup             String?
+  allergies              String?
+  existingConditions     String?
+  currentMedications     String?
   city                   String?
   state                  String?
   country                String?
-  bloodGroup             String?
-  allergies              String?             @db.Text
-  existingConditions     String?             @db.Text
-  currentMedications     String?             @db.Text
   doctorAppointments     Appointment[]       @relation("DoctorAppointments")
   patientAppointments    Appointment[]       @relation("PatientAppointments")
   availabilities         Availability[]
   transactions           CreditTransaction[]
-  payouts                Payout[]
   notifications          Notification[]
-  prescriptionsAsPatient Prescription[]      @relation("PrescriptionPatient")
+  payouts                Payout[]
   prescriptionsAsDoctor  Prescription[]      @relation("PrescriptionDoctor")
-  reviewsGiven           Review[]            @relation("ReviewPatient")
+  prescriptionsAsPatient Prescription[]      @relation("PrescriptionPatient")
   reviewsReceived        Review[]            @relation("ReviewDoctor")
+  reviewsGiven           Review[]            @relation("ReviewPatient")
 
   @@index([city])
   @@index([state])
@@ -51,10 +51,10 @@ model Availability {
   doctorId    String
   startTime   DateTime
   endTime     DateTime
+  status      SlotStatus @default(AVAILABLE)
   dayOfWeek   Int?
   isRecurring Boolean    @default(true)
   blockedDate DateTime?
-  status      SlotStatus @default(AVAILABLE)
   doctor      User       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@index([doctorId, startTime])
@@ -68,17 +68,17 @@ model Appointment {
   startTime             DateTime
   endTime               DateTime
   status                AppointmentStatus     @default(SCHEDULED)
-  notes                 String?               @db.Text
-  patientDescription    String?               @db.Text
-  aiSummary             String?               @db.Text
-  aiSpecialtySuggestion String?
-  videoSessionId        String?
+  notes                 String?
+  patientDescription    String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
+  videoSessionId        String?
+  aiSummary             String?
+  aiSpecialtySuggestion String?
   doctor                User                  @relation("DoctorAppointments", fields: [doctorId], references: [id])
   patient               User                  @relation("PatientAppointments", fields: [patientId], references: [id])
-  notifications         Notification[]
   reminders             AppointmentReminder[]
+  notifications         Notification[]
   prescription          Prescription?
   review                Review?
 
@@ -92,8 +92,8 @@ model CreditTransaction {
   amount        Int
   type          TransactionType
   packageId     String?
-  allocationKey String?         @unique
   createdAt     DateTime        @default(now())
+  allocationKey String?         @unique
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -122,12 +122,12 @@ model Notification {
   appointmentId String?
   type          NotificationType
   title         String
-  message       String           @db.Text
+  message       String
   dedupeKey     String           @unique
   readAt        DateTime?
   createdAt     DateTime         @default(now())
-  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointment   Appointment?     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
   @@index([appointmentId, type])
@@ -149,13 +149,13 @@ model Prescription {
   appointmentId       String                 @unique
   patientId           String
   doctorId            String
-  diagnosis           String?                @db.Text
-  generalInstructions String?                @db.Text
+  diagnosis           String?
+  generalInstructions String?
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
   appointment         Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient             User                   @relation("PrescriptionPatient", fields: [patientId], references: [id], onDelete: Cascade)
   doctor              User                   @relation("PrescriptionDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient             User                   @relation("PrescriptionPatient", fields: [patientId], references: [id], onDelete: Cascade)
   medicines           PrescriptionMedicine[]
 
   @@index([patientId, createdAt])
@@ -169,7 +169,7 @@ model PrescriptionMedicine {
   dosage         String
   frequency      String
   duration       String
-  instructions   String?      @db.Text
+  instructions   String?
   createdAt      DateTime     @default(now())
   prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 }
@@ -180,12 +180,12 @@ model Review {
   patientId     String
   doctorId      String
   rating        Int
-  comment       String?     @db.Text
+  comment       String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient       User        @relation("ReviewPatient", fields: [patientId], references: [id], onDelete: Cascade)
   doctor        User        @relation("ReviewDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient       User        @relation("ReviewPatient", fields: [patientId], references: [id], onDelete: Cascade)
 
   @@index([doctorId, createdAt])
   @@index([patientId, createdAt])
@@ -212,10 +212,10 @@ enum SlotStatus {
 
 enum AppointmentStatus {
   SCHEDULED
-  CONFIRMED
-  IN_PROGRESS
   COMPLETED
   CANCELLED
+  CONFIRMED
+  IN_PROGRESS
   NO_SHOW
 }
 

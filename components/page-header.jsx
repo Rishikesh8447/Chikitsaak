@@ -19,16 +19,6 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-6 flex flex-col justify-between gap-3">
-      <Link href={backLink}>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mb-1 border-border/80 text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          {backLabel}
-        </Button>
-      </Link>
       <div className="flex min-w-0 items-center gap-3">
         {icon && (
           <div className="text-emerald-600 dark:text-emerald-400 shrink-0">
@@ -39,6 +29,15 @@ export function PageHeader({
         )}
         <h1 className="min-w-0 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{title}</h1>
       </div>
+      <Link href={backLink} className="w-fit">
+        <Button
+          variant="outline"
+          className="border-border/80 text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {backLabel}
+        </Button>
+      </Link>
     </div>
   );
 }

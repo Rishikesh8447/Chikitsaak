@@ -34,7 +34,7 @@ export default async function DoctorSpecialtyPage({ params }) {
         </div>
       ) : (
         <div className="text-center py-12">
-          <h3 className="text-xl font-medium text-white mb-2">
+          <h3 className="mb-2 text-xl font-medium text-slate-900 dark:text-white">
             No doctors available
           </h3>
           <p className="text-muted-foreground">

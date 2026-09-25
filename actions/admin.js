@@ -151,7 +151,7 @@ export async function updateDoctorStatus(formData) {
     return { success: true };
   } catch (error) {
     console.error("Failed to update doctor status:", error);
-    throw new Error(`Failed to update doctor status: ${error.message}`);
+    throw new Error("Failed to update doctor status. Please try again.");
   }
 }
 
@@ -185,7 +185,7 @@ export async function updateDoctorActiveStatus(formData) {
     return { success: true };
   } catch (error) {
     console.error("Failed to update doctor active status:", error);
-    throw new Error(`Failed to update doctor status: ${error.message}`);
+    throw new Error("Failed to update doctor status. Please try again.");
   }
 }
 
@@ -268,6 +268,6 @@ export async function approvePayout(formData) {
     return { success: true };
   } catch (error) {
     console.error("Failed to approve payout:", error);
-    throw new Error(`Failed to approve payout: ${error.message}`);
+    throw new Error("Failed to approve payout. Please try again.");
   }
 }

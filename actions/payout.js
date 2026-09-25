@@ -60,7 +60,7 @@ export async function requestPayout(formData) {
     return { success: true, payout };
   } catch (error) {
     console.error("Failed to request payout:", error);
-    throw new Error("Failed to request payout: " + error.message);
+    throw new Error("Failed to request payout. Please try again.");
   }
 }
 
@@ -97,7 +97,7 @@ export async function getDoctorPayouts() {
 
     return { payouts };
   } catch (error) {
-    throw new Error("Failed to fetch payouts: " + error.message);
+    throw new Error("Failed to fetch payouts. Please try again.");
   }
 }
 
@@ -165,6 +165,6 @@ export async function getDoctorEarnings() {
       },
     };
   } catch (error) {
-    throw new Error("Failed to fetch doctor earnings: " + error.message);
+    throw new Error("Failed to fetch doctor earnings. Please try again.");
   }
 }

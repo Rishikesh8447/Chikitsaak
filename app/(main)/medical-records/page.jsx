@@ -10,7 +10,7 @@ export default async function MedicalRecordsPage() {
   const user = await getCurrentUser();
   if (!user || user.role !== "PATIENT") redirect("/onboarding");
   const { profile, appointments, prescriptions } = await getMyMedicalRecords();
-  return <div className="container mx-auto max-w-7xl space-y-5 px-3 py-6 sm:px-4 sm:py-8">
+  return <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8">
     <PageHeader icon={<HeartPulse />} title="My Medical Records" backLink="/appointments" backLabel="Appointments" />
     <div className="grid gap-5 lg:grid-cols-2">
       <Card><CardHeader><CardTitle>Medical Profile</CardTitle></CardHeader><CardContent><MedicalProfileForm profile={profile} /></CardContent></Card>
@@ -21,5 +21,5 @@ export default async function MedicalRecordsPage() {
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-emerald-500" />Prescriptions</CardTitle></CardHeader><CardContent className="space-y-3">
       {prescriptions.length ? prescriptions.map((prescription) => <div key={prescription.id} className="rounded-lg border border-border/80 p-4"><div className="flex flex-wrap justify-between gap-2"><div className="font-medium text-foreground">Dr. {prescription.doctor.name || "Doctor"}</div><div className="text-sm text-muted-foreground">{new Date(prescription.createdAt).toLocaleDateString()}</div></div><p className="mt-2 text-sm text-foreground"><span className="text-muted-foreground">Diagnosis:</span> {prescription.diagnosis}</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{prescription.medicines.map((medicine) => <div key={medicine.id} className="rounded-lg bg-muted/50 p-3 text-sm"><div className="font-medium text-foreground">{medicine.name}</div><div className="text-muted-foreground">{medicine.dosage} · {medicine.frequency} · {medicine.duration}</div>{medicine.instructions && <div className="mt-1 text-muted-foreground">{medicine.instructions}</div>}</div>)}</div>{prescription.generalInstructions && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-muted-foreground">{prescription.generalInstructions}</p>}</div>) : <p className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">No prescriptions available yet.</p>}
     </CardContent></Card>
-  </div>;
+  </main>;
 }

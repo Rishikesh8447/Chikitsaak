@@ -75,7 +75,7 @@ const role = formData.get("role");
 }
     catch (error) {
          console.error("Failed to set user role:", error);
-    throw new Error(`Failed to update user profile: ${error.message}`);
+    throw new Error("Failed to update user profile. Please try again.");
     }
 }
 
@@ -98,6 +98,6 @@ export async function getCurrentUser() {
     return user;
   } catch (error) {
     console.error("Failed to get user information:", error);
-    return null;
+    throw new Error("Unable to load your account right now. Please try again later.");
   }
 }

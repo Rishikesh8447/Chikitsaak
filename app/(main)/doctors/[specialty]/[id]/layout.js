@@ -1,11 +1,12 @@
 import { getDoctorById } from '@/actions/appointments';
 import { PageHeader } from '@/components/page-header';
-import { redirect } from 'next/dist/server/api-utils';
+import { notFound } from 'next/navigation';
 import React from 'react'
 
 export async function generateMetadata({params}){
- const{id} = await params;
- const{doctor}=await getDoctorById(id);
+ const { id } = await params;
+ const { doctor } = await getDoctorById(id);
+ if (!doctor) notFound();
 
  return {
     title:`Dr. ${doctor.name}-"Chikitsaak"`,
@@ -16,17 +17,17 @@ export async function generateMetadata({params}){
 
 
 const DoctorProfileLayout = async({children,params}) => {
- const{id} = await params;
- const{doctor}=await getDoctorById(id);
+ const { id, specialty } = await params;
+ const { doctor } = await getDoctorById(id);
 
- if(!doctor) redirect("/doctors");
+ if(!doctor) notFound();
   return (
     
     <div className='container mx-auto px-4 py-8'> 
       <PageHeader
-      title={"Dr."+doctor.name}
-      backLink={`/doctors/${doctor.specialty}`}
-      backLabel={`Back to ${doctor.specialty}`}
+      title="Doctor Profile"
+      backLink={`/doctors/${encodeURIComponent(decodeURIComponent(specialty))}`}
+      backLabel={decodeURIComponent(specialty)}
       />
       {children}
     </div>

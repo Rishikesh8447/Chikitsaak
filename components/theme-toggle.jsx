@@ -14,7 +14,12 @@ export default function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <button className="rounded-full border p-2 text-xl">
+      <button
+        type="button"
+        aria-label="Loading theme switcher"
+        disabled
+        className="inline-flex size-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground"
+      >
         ⏳
       </button>
     );
@@ -22,10 +27,13 @@ export default function ThemeToggle() {
 
   return (
     <button
+      type="button"
       onClick={() =>
         setTheme(resolvedTheme === "dark" ? "light" : "dark")
       }
-      className="rounded-full border p-2 text-xl hover:bg-gray-100 dark:hover:bg-gray-800"
+      aria-label={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      title={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      className="inline-flex size-9 items-center justify-center rounded-full border border-border bg-background text-lg text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       {resolvedTheme === "dark" ? "☀️" : "🌙"}
     </button>

@@ -21,7 +21,7 @@ export default async function PatientAppointmentsPage({ searchParams }) {
   const [{ appointments, error }, analytics] = await Promise.all([getPatientAppointments(), getPatientAnalytics(range)]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
         icon={<Calendar />}
         title="My Appointments"
@@ -31,10 +31,10 @@ export default async function PatientAppointmentsPage({ searchParams }) {
 
       <AnalyticsPanel title="Your consultation summary" analytics={analytics} basePath="/appointments" />
 
-      <Card className="border-border shadow-xs">
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-xl font-bold text-slate-900 dark:text-white flex items-center">
-            <Calendar className="h-5 w-5 mr-2 text-emerald-600 dark:text-emerald-400" />
+            <Calendar className="mr-2 h-5 w-5 text-primary" />
             Your Scheduled Appointments
           </CardTitle>
         </CardHeader>
@@ -70,6 +70,6 @@ export default async function PatientAppointmentsPage({ searchParams }) {
           )}
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

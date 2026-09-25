@@ -76,8 +76,8 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
   return (
     <div className="space-y-6 min-w-0 w-full">
       {/* Earnings Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <Card className="border-border/80 dark:border-border shadow-xs">
+      <div className="grid w-full min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+        <Card className="min-w-0 border-border shadow-none">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -98,7 +98,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
           </CardContent>
         </Card>
 
-        <Card className="border-border/80 dark:border-border shadow-xs">
+        <Card className="min-w-0 border-border shadow-none">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -114,7 +114,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
           </CardContent>
         </Card>
 
-        <Card className="border-border/80 dark:border-border shadow-xs">
+        <Card className="min-w-0 border-border shadow-none">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -133,7 +133,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
           </CardContent>
         </Card>
 
-        <Card className="border-border/80 dark:border-border shadow-xs">
+        <Card className="min-w-0 border-border shadow-none">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -151,7 +151,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
       </div>
 
       {/* Payout Section */}
-      <Card className="border-border/80 dark:border-border shadow-xs">
+      <Card className="min-w-0 border-border shadow-none">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-foreground flex items-center">
             <CreditCard className="h-5 w-5 mr-2 text-emerald-600 dark:text-emerald-400" />
@@ -160,22 +160,20 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Current Payout Status */}
-          <div className="bg-muted/30 p-4 rounded-xl border border-border/80">
+          <div className="min-w-0 rounded-xl border border-border/80 bg-muted/30 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-medium text-foreground">
+              <h2 className="text-base font-medium text-foreground">
                 Available for Payout
-              </h3>
+              </h2>
               {pendingPayout ? (
                 <Badge
-                  variant="outline"
-                  className="bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                  className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
                 >
                   PROCESSING
                 </Badge>
               ) : (
                 <Badge
-                  variant="outline"
-                  className="bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                 >
                   Available
                 </Badge>
@@ -207,7 +205,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 <Alert className="mt-2 border-border/80">
                   <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <AlertDescription className="text-xs text-muted-foreground">
-                    Your payout request is being processed. You&apos;ll receive the
+                    Your payout request is queued for manual processing. You&apos;ll receive the
                     payment once an admin approves it. Your credits will be
                     deducted after processing.
                   </AlertDescription>
@@ -286,11 +284,10 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                       </p>
                     </div>
                     <Badge
-                      variant="outline"
                       className={
                         payout.status === "PROCESSED"
-                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                          : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
                       }
                     >
                       {payout.status}

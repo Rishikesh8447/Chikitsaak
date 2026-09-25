@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Card,
@@ -41,7 +41,7 @@ export default function OnboardingPage() {
     handleSubmit,
     formState: { errors },
     setValue,
-    watch,
+    control,
   } = useForm({
     resolver: zodResolver(doctorFormSchema),
     defaultValues: {
@@ -56,7 +56,7 @@ export default function OnboardingPage() {
   });
 
   // Watch specialty value for controlled select component
-  const specialtyValue = watch("specialty");
+  const specialtyValue = useWatch({ control, name: "specialty" });
 
   // Handle patient role selection
   const handlePatientSelection = async () => {
@@ -72,7 +72,7 @@ export default function OnboardingPage() {
     if (data && data?.success) {
       router.push(data.redirect);
     }
-  }, [data]);
+  }, [data, router]);
 
   // Added missing onDoctorSubmit function
   const onDoctorSubmit = async (data) => {

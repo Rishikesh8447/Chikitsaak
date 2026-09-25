@@ -65,7 +65,7 @@ export function PendingDoctors({ doctors }) {
 
   return (
     <div>
-      <Card className="bg-muted/20 border-emerald-900/20">
+      <Card className="border-border shadow-none">
         <CardHeader>
           <CardTitle className="text-xl font-bold text-white">
             Pending Doctor Verifications
@@ -80,17 +80,17 @@ export function PendingDoctors({ doctors }) {
               No pending verification requests at this time.
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="divide-y divide-border">
               {doctors.map((doctor) => (
                 <Card
                   key={doctor.id}
-                  className="bg-background border-emerald-900/20 hover:border-emerald-700/30 transition-all"
+                  className="rounded-none border-0 border-b border-border bg-transparent shadow-none last:border-0"
                 >
                   <CardContent className="p-4">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <div className="bg-muted/20 rounded-full p-2">
-                          <User className="h-5 w-5 text-emerald-400" />
+                          <User className="h-5 w-5 text-primary" />
                         </div>
                         <div>
                           <h3 className="font-medium text-white">

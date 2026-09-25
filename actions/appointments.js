@@ -10,13 +10,14 @@ import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { resolveDoctorPublicNames } from "@/lib/doctor-name";
 
 const BOOKING_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
+const VIDEO_STATUSES = ["CONFIRMED", "IN_PROGRESS"];
 
 // Initialize Vonage Video API client
 let vonage;
 function getVonage() {
   if (vonage) return vonage;
   if (!process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID || !process.env.VONAGE_PRIVATE_KEY) throw new Error("Video service is not configured");
-  vonage = new Vonage(new Auth({ applicationId: process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID, privateKey: process.env.VONAGE_PRIVATE_KEY }), {});
+  vonage = new Vonage(new Auth({ applicationId: process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID, privateKey: process.env.VONAGE_PRIVATE_KEY.replace(/\\n/g, "\n") }), {});
   return vonage;
 }
 
@@ -49,7 +50,6 @@ export async function bookAppointment(formData) {
     }
     const durationMinutes = (endTime - startTime) / 60000;
     if (durationMinutes !== 30) throw new Error("Appointments must be 30 minutes");
-    const sessionId = await createVideoSession();
     const appointment = await db.$transaction(async (tx) => {
       const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" } });
       const doctor = await tx.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
@@ -61,29 +61,34 @@ export async function bookAppointment(formData) {
         throw new Error("The selected time is outside the doctor's availability");
       }
       const conflict = { startTime: { lt: endTime }, endTime: { gt: startTime } };
-      const [doctorConflict, patientConflict] = await Promise.all([
-        tx.appointment.findFirst({ where: { doctorId, status: { in: BOOKING_STATUSES }, ...conflict } }),
-        tx.appointment.findFirst({ where: { patientId: patient.id, status: { in: BOOKING_STATUSES }, ...conflict } }),
-      ]);
+      const doctorConflict = await tx.appointment.findFirst({ where: { doctorId, status: { in: BOOKING_STATUSES }, ...conflict } });
+      const patientConflict = await tx.appointment.findFirst({ where: { patientId: patient.id, status: { in: BOOKING_STATUSES }, ...conflict } });
       if (doctorConflict) throw new Error("This time slot is already booked");
       if (patientConflict) throw new Error("You already have an appointment at this time");
       const debit = await tx.user.updateMany({ where: { id: patient.id, credits: { gte: 2 } }, data: { credits: { decrement: 2 } } });
       if (debit.count !== 1) throw new Error("Insufficient credits to book an appointment");
       await tx.user.update({ where: { id: doctor.id }, data: { credits: { increment: 2 } } });
-      const newAppointment = await tx.appointment.create({ data: { patientId: patient.id, doctorId, startTime, endTime, patientDescription, aiSummary: typeof aiSummary === "string" && aiSummary.trim() ? aiSummary.trim() : null, aiSpecialtySuggestion: typeof aiSpecialtySuggestion === "string" && aiSpecialtySuggestion.trim() ? aiSpecialtySuggestion.trim() : null, status: "SCHEDULED", videoSessionId: sessionId } });
+      const newAppointment = await tx.appointment.create({ data: { patientId: patient.id, doctorId, startTime, endTime, patientDescription, aiSummary: typeof aiSummary === "string" && aiSummary.trim() ? aiSummary.trim() : null, aiSpecialtySuggestion: typeof aiSpecialtySuggestion === "string" && aiSpecialtySuggestion.trim() ? aiSpecialtySuggestion.trim() : null, status: "SCHEDULED" } });
       await tx.creditTransaction.createMany({ data: [
         { userId: patient.id, amount: -2, type: "APPOINTMENT_DEDUCTION", allocationKey: `appointment:${newAppointment.id}:patient-debit` },
         { userId: doctor.id, amount: 2, type: "APPOINTMENT_DEDUCTION", allocationKey: `appointment:${newAppointment.id}:doctor-credit` },
       ] });
       await createAppointmentNotificationPair(tx, newAppointment, { type: "APPOINTMENT_BOOKED", title: "Appointment booked", patientMessage: "Your appointment request was booked.", doctorMessage: "You have a new appointment request.", key: `appointment:${newAppointment.id}:booked` });
       return newAppointment;
-    }, { isolationLevel: "Serializable" });
+    }, { isolationLevel: "Serializable", timeout: 15000 });
+
+    try {
+      const sessionId = await createVideoSession();
+      await db.appointment.update({ where: { id: appointment.id }, data: { videoSessionId: sessionId } });
+    } catch (error) {
+      console.error("Failed to provision video session for appointment", appointment.id, error instanceof Error ? error.message : "Unknown error");
+    }
 
     revalidatePath("/appointments");
     return { success: true, appointment: appointment };
   } catch (error) {
     console.error("Failed to book appointment:", error);
-    throw new Error(error instanceof Error ? error.message : "Failed to book appointment");
+    throw new Error("Failed to book appointment. Please try again.");
   }
 }
 
@@ -95,8 +100,17 @@ async function createVideoSession() {
     const session = await getVonage().video.createSession({ mediaMode: "routed" });
     return session.sessionId;
   } catch (error) {
-    throw new Error("Failed to create video session: " + error.message);
+    throw new Error("Video session provisioning failed");
   }
+}
+
+async function ensureVideoSession(appointment) {
+  if (appointment.videoSessionId) return appointment.videoSessionId;
+  const sessionId = await createVideoSession();
+  await db.appointment.updateMany({ where: { id: appointment.id, videoSessionId: null }, data: { videoSessionId: sessionId } });
+  const updated = await db.appointment.findUnique({ where: { id: appointment.id }, select: { videoSessionId: true } });
+  if (!updated?.videoSessionId) throw new Error("Video session could not be saved");
+  return updated.videoSessionId;
 }
 
 /**
@@ -144,8 +158,8 @@ export async function authorizeVideoCall(formData) {
     }
 
     // Verify the appointment is scheduled
-    if (!BOOKING_STATUSES.includes(appointment.status)) {
-      throw new Error("This appointment is not currently scheduled");
+    if (!VIDEO_STATUSES.includes(appointment.status)) {
+      throw new Error(appointment.status === "SCHEDULED" ? "Waiting for doctor confirmation" : "This appointment is not available for video consultation");
     }
 
     // Verify the appointment is within a valid time range (e.g., starting 5 minutes before scheduled time)
@@ -153,16 +167,16 @@ export async function authorizeVideoCall(formData) {
     const appointmentTime = new Date(appointment.startTime);
     const timeDifference = (appointmentTime - now) / (1000 * 60); // difference in minutes
 
-    if (timeDifference > 30) {
+    if (timeDifference > 30 || now > new Date(appointment.endTime)) {
       throw new Error(
-        "The call will be available 30 minutes before the scheduled time"
+        timeDifference > 30 ? "The call will be available 30 minutes before the scheduled time" : "This appointment has ended"
       );
     }
 
-    if (!appointment.videoSessionId) throw new Error("Video session is unavailable");
+    await ensureVideoSession(appointment);
     return { success: true };
   } catch (error) {
-    throw new Error(error instanceof Error ? error.message : "Failed to authorize video call");
+    throw new Error(error instanceof Error && ["Unauthorized", "User not found", "Appointment ID is required", "Appointment not found", "You are not authorized to join this call", "Waiting for doctor confirmation", "This appointment is not available for video consultation", "The call will be available 30 minutes before the scheduled time", "Video session provisioning failed", "Video session could not be saved"].includes(error.message) ? error.message : "Unable to authorize video call. Please try again.");
   }
 }
 
@@ -171,12 +185,15 @@ export async function getVideoCallCredentials(appointmentId) {
   if (!userId || typeof appointmentId !== "string") throw new Error("Unauthorized");
   const user = await db.user.findUnique({ where: { clerkUserId: userId } });
   const appointment = await db.appointment.findUnique({ where: { id: appointmentId } });
+  console.info("Video credentials debug", { appointmentId, status: appointment?.status, hasSessionId: Boolean(appointment?.videoSessionId), hasVonageAppId: Boolean(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID), hasPrivateKey: Boolean(process.env.VONAGE_PRIVATE_KEY) });
   if (!user || !appointment || (appointment.doctorId !== user.id && appointment.patientId !== user.id)) throw new Error("You are not authorized to join this call");
-  if (!BOOKING_STATUSES.includes(appointment.status) || !appointment.videoSessionId) throw new Error("This appointment is not available for video consultation");
+  if (!VIDEO_STATUSES.includes(appointment.status)) throw new Error(appointment.status === "SCHEDULED" ? "Waiting for doctor confirmation" : "This appointment is not available for video consultation");
   const now = new Date();
-  if ((new Date(appointment.startTime) - now) / 60000 > 30 || now > new Date(appointment.endTime)) throw new Error("The video call is not currently available");
-  const token = getVonage().video.generateClientToken(appointment.videoSessionId, { role: "publisher", expireTime: Math.floor(new Date(appointment.endTime).getTime() / 1000) + 60 * 60, data: JSON.stringify({ name: user.name || "Participant", role: user.role, userId: user.id }) });
-  return { success: true, videoSessionId: appointment.videoSessionId, token };
+  if ((new Date(appointment.startTime) - now) / 60000 > 30) throw new Error("The video call is not currently available");
+  if (now >= new Date(appointment.endTime)) throw new Error("This appointment has ended");
+  const sessionId = await ensureVideoSession(appointment);
+  const token = getVonage().video.generateClientToken(sessionId, { role: "publisher", expireTime: Math.floor(new Date(appointment.endTime).getTime() / 1000) + 60 * 60, data: JSON.stringify({ name: user.name || "Participant", role: user.role, userId: user.id }) });
+  return { success: true, videoSessionId: sessionId, token, appId: process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID };
 }
 
 /**
@@ -184,9 +201,9 @@ export async function getVideoCallCredentials(appointmentId) {
  */
 export async function getDoctorById(doctorId) {
   try {
-    const doctor = await db.user.findUnique({
+    const doctor = await db.user.findFirst({
       where: {
-        id: doctorId,
+        OR: [{ id: doctorId }, { clerkUserId: doctorId }],
         role: "DOCTOR",
         verificationStatus: "VERIFIED",
       },
@@ -204,9 +221,7 @@ export async function getDoctorById(doctorId) {
       },
     });
 
-    if (!doctor) {
-      throw new Error("Doctor not found");
-    }
+    if (!doctor) return { doctor: null };
 
     const [resolvedDoctor] = await resolveDoctorPublicNames([doctor]);
     return { doctor: resolvedDoctor };
@@ -340,7 +355,7 @@ export async function legacyGetAvailableTimeSlots(doctorId) {
     return { days: result };
   } catch (error) {
     console.error("Failed to fetch available slots:", error);
-    throw new Error("Failed to fetch available time slots: " + error.message);
+    throw new Error("Failed to fetch available time slots. Please try again.");
   }
 }
 

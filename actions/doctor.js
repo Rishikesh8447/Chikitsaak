@@ -64,7 +64,7 @@ export async function setAvailabilitySlots(formData) {
     return { success: true, slot: newSlot };
   } catch (error) {
     console.error("Failed to set availability slots:", error);
-    throw new Error("Failed to set availability: " + error.message);
+    throw new Error("Failed to save availability. Please try again.");
   }
 }
 
@@ -101,7 +101,7 @@ export async function getDoctorAvailability() {
 
     return { slots: availabilitySlots };
   } catch (error) {
-    throw new Error("Failed to fetch availability slots " + error.message);
+    throw new Error("Failed to fetch availability slots. Please try again.");
   }
 }
 
@@ -132,7 +132,7 @@ export async function getDoctorAppointments() {
       where: {
         doctorId: doctor.id,
         status: {
-          in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"],
+          in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED"],
         },
       },
       include: {
@@ -142,11 +142,12 @@ export async function getDoctorAppointments() {
       orderBy: {
         startTime: "asc",
       },
+      take: 100,
     });
 
     return { appointments };
   } catch (error) {
-    throw new Error("Failed to fetch appointments " + error.message);
+    throw new Error("Failed to fetch appointments. Please try again.");
   }
 }
 
@@ -190,14 +191,6 @@ export async function cancelAppointment(formData) {
 
     if (!appointment) {
       throw new Error("Appointment not found");
-    }
-
-    if (!["IN_PROGRESS", "COMPLETED"].includes(appointment.status)) {
-      throw new Error("Consultation notes can only be added during or after a consultation");
-    }
-
-    if (typeof notes !== "string" || notes.trim().length > 10000) {
-      throw new Error("Notes are invalid");
     }
 
     // Verify the user is either the doctor or the patient for this appointment
@@ -258,7 +251,7 @@ export async function cancelAppointment(formData) {
     return { success: true };
   } catch (error) {
     console.error("Failed to cancel appointment:", error);
-    throw new Error("Failed to cancel appointment: " + error.message);
+    throw new Error("Failed to cancel appointment. Please try again.");
   }
 }
 
@@ -317,7 +310,7 @@ export async function addAppointmentNotes(formData) {
     return { success: true, appointment: updatedAppointment };
   } catch (error) {
     console.error("Failed to add appointment notes:", error);
-    throw new Error("Failed to update notes: " + error.message);
+    throw new Error("Failed to update notes. Please try again.");
   }
 }
 
@@ -380,21 +373,19 @@ export async function markAppointmentCompleted(formData) {
     }
 
     // Update the appointment status to COMPLETED
-    const updatedAppointment = await db.appointment.update({
-      where: {
-        id: appointmentId,
-      },
-      data: {
-        status: "COMPLETED",
-      },
+    const completed = await db.appointment.updateMany({
+      where: { id: appointmentId, doctorId: doctor.id, status: "IN_PROGRESS" },
+      data: { status: "COMPLETED" },
     });
+    if (completed.count !== 1) throw new Error("This appointment cannot be marked as completed");
+    const updatedAppointment = await db.appointment.findUnique({ where: { id: appointmentId } });
 
     revalidatePath("/doctor");
     return { success: true, appointment: updatedAppointment };
   } catch (error) {
     console.error("Failed to mark appointment as completed:", error);
     throw new Error(
-      "Failed to mark appointment as completed: " + error.message
+      "Failed to mark appointment as completed. Please try again."
     );
   }
 }
@@ -417,7 +408,7 @@ export async function updateAppointmentStatus(formData) {
   if (!appointment || !STATUS_TRANSITIONS[appointment.status]?.includes(nextStatus)) throw new Error("Invalid appointment status transition");
   if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && new Date() < appointment.endTime) throw new Error("This appointment has not ended yet");
   const updated = await db.$transaction(async (tx) => {
-    const changed = await tx.appointment.update({ where: { id: appointment.id }, data: { status: nextStatus } });
+    const changed = await tx.appointment.update({ where: { id: appointment.id, status: appointment.status }, data: { status: nextStatus } });
     if (nextStatus === "CONFIRMED") await createAppointmentNotificationPair(tx, changed, { type: "APPOINTMENT_CONFIRMED", title: "Appointment confirmed", patientMessage: "Your appointment has been confirmed.", doctorMessage: "Appointment confirmed.", key: `appointment:${changed.id}:confirmed` });
     if (nextStatus === "NO_SHOW") await createAppointmentNotificationPair(tx, changed, { type: "NO_SHOW", title: "Appointment marked no-show", patientMessage: "Your appointment was marked as no-show.", doctorMessage: "The appointment was marked as no-show.", key: `appointment:${changed.id}:no-show` });
     return changed;

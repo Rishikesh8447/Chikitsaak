@@ -70,7 +70,7 @@ export async function createPrescription(formData) {
     revalidatePath("/doctor");
     return { success: true, prescription };
   } catch (error) {
-    throw new Error(error instanceof Error ? error.message : "Failed to create prescription");
+    throw new Error("Failed to create prescription. Please try again.");
   }
 }
 
@@ -125,7 +125,7 @@ export async function createReview(formData) {
     return { success: true };
   } catch (error) {
     if (error?.code === "P2002") throw new Error("You have already reviewed this consultation");
-    throw new Error(error instanceof Error ? error.message : "Failed to submit review");
+    throw new Error("Failed to submit review. Please try again.");
   }
 }
 

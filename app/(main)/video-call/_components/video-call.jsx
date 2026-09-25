@@ -16,20 +16,25 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function VideoCall({ sessionId, token }) {
+export default function VideoCall({ appId: providedAppId, sessionId, token }) {
   const [isLoading, setIsLoading] = useState(true);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [hasOtherParticipant, setHasOtherParticipant] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [publisherReady, setPublisherReady] = useState(false);
+  const [connectionError, setConnectionError] = useState("");
 
   const sessionRef = useRef(null);
   const publisherRef = useRef(null);
+  const initializingRef = useRef(false);
+  const timeoutRef = useRef(null);
+  const connectedRef = useRef(false);
 
   const router = useRouter();
 
-  const appId = process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID;
+  const appId = providedAppId;
 
   // Handle script load
   const handleScriptLoad = () => {
@@ -44,8 +49,12 @@ export default function VideoCall({ sessionId, token }) {
 
   // Initialize video session
   const initializeSession = () => {
+    if (initializingRef.current || sessionRef.current) return;
+    initializingRef.current = true;
+    setConnectionError("");
     if (!appId || !sessionId || !token) {
       toast.error("Missing required video call parameters");
+      initializingRef.current = false;
       router.push("/appointments");
       return;
     }
@@ -56,6 +65,7 @@ export default function VideoCall({ sessionId, token }) {
 
       // Subscribe to new streams
       sessionRef.current.on("streamCreated", (event) => {
+        setHasOtherParticipant(true);
         sessionRef.current.subscribe(
           event.stream,
           "subscriber",
@@ -74,10 +84,12 @@ export default function VideoCall({ sessionId, token }) {
 
       // Handle session events
       sessionRef.current.on("sessionConnected", () => {
+        connectedRef.current = true;
         setIsConnected(true);
         setIsLoading(false);
+        initializingRef.current = false;
+        clearTimeout(timeoutRef.current);
 
-        // THIS IS THE FIX - Initialize publisher AFTER session connects
         publisherRef.current = window.OT.initPublisher(
           "publisher", // This targets the div with id="publisher"
           {
@@ -93,36 +105,57 @@ export default function VideoCall({ sessionId, token }) {
               toast.error("Error initializing your camera and microphone");
             } else {
               setPublisherReady(true);
+              sessionRef.current.publish(publisherRef.current, (publishError) => {
+                if (publishError) toast.error("Unable to publish your video. Check camera permissions and try again.");
+              });
             }
           }
         );
       });
 
       sessionRef.current.on("sessionDisconnected", () => {
+        connectedRef.current = false;
         setIsConnected(false);
       });
+      sessionRef.current.on("streamDestroyed", () => setHasOtherParticipant(false));
 
       // Connect to the session
       sessionRef.current.connect(token, (error) => {
         if (error) {
           toast.error("Error connecting to video session");
+          setConnectionError("Unable to connect to the video call. Please try again.");
+          setIsLoading(false);
+          initializingRef.current = false;
         } else {
-          // Publish your stream AFTER connecting
-          if (publisherRef.current) {
-            sessionRef.current.publish(publisherRef.current, (error) => {
-              if (error) {
-                console.error("Stream publishing failed");
-                toast.error("Error publishing your stream");
-              } else {
-              }
-            });
-          }
         }
       });
+      timeoutRef.current = setTimeout(() => {
+        if (!connectedRef.current) {
+          setConnectionError("The video call took too long to connect. Please try again.");
+          setIsLoading(false);
+          initializingRef.current = false;
+        }
+      }, 20000);
     } catch (error) {
       toast.error("Failed to initialize video call");
       setIsLoading(false);
+      setConnectionError("Unable to initialize the video call. Please try again.");
+      initializingRef.current = false;
     }
+  };
+
+  const retryConnection = () => {
+    publisherRef.current?.destroy();
+    sessionRef.current?.disconnect();
+    publisherRef.current = null;
+    sessionRef.current = null;
+    initializingRef.current = false;
+    setPublisherReady(false);
+    setIsConnected(false);
+    setHasOtherParticipant(false);
+    connectedRef.current = false;
+    setIsLoading(true);
+    initializeSession();
   };
 
   // Toggle video
@@ -161,12 +194,14 @@ export default function VideoCall({ sessionId, token }) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearTimeout(timeoutRef.current);
       if (publisherRef.current) {
         publisherRef.current.destroy();
       }
       if (sessionRef.current) {
         sessionRef.current.disconnect();
       }
+      connectedRef.current = false;
     };
   }, []);
 
@@ -196,12 +231,15 @@ export default function VideoCall({ sessionId, token }) {
         onLoad={handleScriptLoad}
         onError={() => {
           toast.error("Failed to load video call script");
+          setConnectionError("Unable to load the video call. Please try again.");
           setIsLoading(false);
         }}
       />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-6">
+      <main className="min-h-[calc(100dvh-4rem)] overflow-x-hidden bg-background">
+      <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl flex-col px-3 py-3 sm:px-6 sm:py-4">
+        <div className="mb-4 flex shrink-0 items-center justify-between border-b border-border pb-3">
+          <div><p className="text-sm font-semibold">Chikitsaak</p><p className="text-xs text-muted-foreground">Consultation</p></div>
           <h1 className="text-3xl font-bold text-white mb-2">
             Video Consultation
           </h1>
@@ -209,12 +247,17 @@ export default function VideoCall({ sessionId, token }) {
             {isConnected
               ? "Connected"
               : isLoading
-              ? "Connecting..."
+              ? "Connecting to video call..."
               : "Connection failed"}
           </p>
         </div>
 
-        {isLoading && !scriptLoaded ? (
+        {connectionError ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+            <p className="text-destructive">{connectionError}</p>
+            <Button onClick={retryConnection} variant="outline">Retry</Button>
+          </div>
+        ) : isLoading && !scriptLoaded ? (
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-12 w-12 text-emerald-400 animate-spin mb-4" />
             <p className="text-white text-lg">
@@ -222,16 +265,16 @@ export default function VideoCall({ sessionId, token }) {
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-1 flex-col gap-4 sm:gap-6">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
               {/* Publisher (Your video) */}
-              <div className="border border-emerald-900/20 rounded-lg overflow-hidden">
+              <div className="order-2 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border">
                 <div className="bg-emerald-900/10 px-3 py-2 text-emerald-400 text-sm font-medium">
                   You
                 </div>
                 <div
                   id="publisher"
-                  className="w-full h-[300px] md:h-[400px] bg-muted/30"
+                  className="relative min-h-[220px] flex-1 bg-muted/30 sm:min-h-[280px]"
                 >
                   {!scriptLoaded && (
                     <div className="flex items-center justify-center h-full">
@@ -244,15 +287,15 @@ export default function VideoCall({ sessionId, token }) {
               </div>
 
               {/* Subscriber (Other person's video) */}
-              <div className="border border-emerald-900/20 rounded-lg overflow-hidden">
+              <div className="order-1 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border">
                 <div className="bg-emerald-900/10 px-3 py-2 text-emerald-400 text-sm font-medium">
                   Other Participant
                 </div>
                 <div
                   id="subscriber"
-                  className="w-full h-[300px] md:h-[400px] bg-muted/30"
+                  className="relative min-h-[220px] flex-1 bg-muted/30 sm:min-h-[280px]"
                 >
-                  {(!isConnected || !scriptLoaded) && (
+                  {(!hasOtherParticipant || !scriptLoaded) && (
                     <div className="flex items-center justify-center h-full">
                       <div className="bg-muted/20 rounded-full p-8">
                         <User className="h-12 w-12 text-emerald-400" />
@@ -264,7 +307,7 @@ export default function VideoCall({ sessionId, token }) {
             </div>
 
             {/* Video controls */}
-            <div className="flex justify-center space-x-4">
+            <div className="flex shrink-0 justify-center gap-3 border-t border-border pt-3 pb-1 sm:gap-4">
               <Button
                 variant="outline"
                 size="lg"
@@ -275,6 +318,7 @@ export default function VideoCall({ sessionId, token }) {
                     : "bg-red-900/20 border-red-900/30 text-red-400"
                 }`}
                 disabled={!publisherReady}
+                aria-label={isVideoEnabled ? "Turn camera off" : "Turn camera on"}
               >
                 {isVideoEnabled ? <Video /> : <VideoOff />}
               </Button>
@@ -289,6 +333,7 @@ export default function VideoCall({ sessionId, token }) {
                     : "bg-red-900/20 border-red-900/30 text-red-400"
                 }`}
                 disabled={!publisherReady}
+                aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
               >
                 {isAudioEnabled ? <Mic /> : <MicOff />}
               </Button>
@@ -298,8 +343,10 @@ export default function VideoCall({ sessionId, token }) {
                 size="lg"
                 onClick={endCall}
                 className="rounded-full p-4 h-14 w-14 bg-red-600 hover:bg-red-700"
+                aria-label="End call"
               >
-                <PhoneOff />
+                <PhoneOff className="mr-2" />
+                <span className="sr-only sm:not-sr-only">End Call</span>
               </Button>
             </div>
 
@@ -316,6 +363,7 @@ export default function VideoCall({ sessionId, token }) {
           </div>
         )}
       </div>
+      </main>
     </>
   );
 }

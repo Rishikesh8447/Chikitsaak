@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {  checkAndAllocateCredits } from "@/actions/credits";
 
-export default function CreditSync({ user }) {
+export default function CreditSync() {
   const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const hasSynced = useRef(false);
@@ -17,14 +17,14 @@ export default function CreditSync({ user }) {
 
     hasSynced.current = true;
 
-    checkAndAllocateCredits(user)
+    checkAndAllocateCredits()
       .then(() => {
         router.refresh();
       })
       .catch((error) => {
         console.error("Failed to sync credits:", error);
       });
-  }, [isLoaded, isSignedIn, router, user]);
+  }, [isLoaded, isSignedIn, router]);
 
   return null;
 }

@@ -272,11 +272,11 @@ export function AppointmentCard({
 
   return (
     <>
-      <Card className="border-border/80 dark:border-border hover:border-emerald-500/40 transition-all shadow-xs">
+      <Card className="border-border transition-colors hover:border-primary/40 shadow-none">
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col md:flex-row justify-between gap-4">
             <div className="flex items-start gap-3.5">
-              <div className="bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl p-2.5 mt-0.5 shrink-0">
+              <div className="mt-0.5 shrink-0 rounded-lg bg-primary/10 p-2.5 text-primary">
                 {otherPartyIcon}
               </div>
               <div>
@@ -313,10 +313,12 @@ export function AppointmentCard({
                 variant="outline"
                 className={
                   appointment.status === "COMPLETED"
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium"
+                    ? "bg-green-700/10 border-green-700/20 text-green-700 dark:text-green-400"
                     : appointment.status === "CANCELLED"
-                    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 font-medium"
-                    : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium"
+                    ? "bg-red-700/10 border-red-700/20 text-red-700 dark:text-red-400"
+                    : appointment.status === "CONFIRMED" || appointment.status === "IN_PROGRESS"
+                    ? "bg-primary/10 border-primary/20 text-primary"
+                    : "bg-muted border-border text-muted-foreground"
                 }
               >
                 {appointment.status}
@@ -327,7 +329,7 @@ export function AppointmentCard({
                     size="sm"
                     onClick={handleMarkCompleted}
                     disabled={completeLoading}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                    className="font-medium"
                   >
                     {completeLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -340,10 +342,10 @@ export function AppointmentCard({
                   </Button>
                 )}
                 {userRole === "DOCTOR" && appointment.status === "SCHEDULED" && (
-                  <Button size="sm" onClick={() => handleStatusChange("CONFIRMED")} disabled={statusLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">Confirm</Button>
+                  <Button size="sm" onClick={() => handleStatusChange("CONFIRMED")} disabled={statusLoading}>Confirm</Button>
                 )}
                 {userRole === "DOCTOR" && appointment.status === "CONFIRMED" && (
-                  <Button size="sm" onClick={() => handleStatusChange("IN_PROGRESS")} disabled={statusLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">Start</Button>
+                  <Button size="sm" onClick={() => handleStatusChange("IN_PROGRESS")} disabled={statusLoading}>Start</Button>
                 )}
                 <Button
                   size="sm"
@@ -476,7 +478,10 @@ export function AppointmentCard({
             {userRole === "PATIENT" && ["SCHEDULED", "CONFIRMED"].includes(appointment.status) && (
               <Button variant="outline" onClick={openReschedule} disabled={slotsLoading} className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">Reschedule</Button>
             )}
-            {(appointment.status === "SCHEDULED" || appointment.status === "CONFIRMED") && (
+            {appointment.status === "SCHEDULED" && (
+              <p className="text-sm text-muted-foreground">Waiting for doctor confirmation.</p>
+            )}
+            {["CONFIRMED", "IN_PROGRESS"].includes(appointment.status) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Video Consultation

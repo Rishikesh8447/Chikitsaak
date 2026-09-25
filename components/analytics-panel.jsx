@@ -7,9 +7,9 @@ const labels = { total: "Total appointments", upcoming: "Upcoming", completed: "
 
 function MetricCards({ metrics }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+    <div className="grid min-w-0 w-full grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
       {Object.entries(metrics || {}).map(([key, value]) => (
-        <div key={key} className="rounded-xl border border-border/80 dark:border-border bg-card p-4 shadow-xs min-w-0">
+        <div key={key} className="min-w-0 rounded-xl border border-border/80 bg-card p-4 shadow-xs last:sm:col-span-2 2xl:last:col-span-1">
           <p className="text-xs font-medium text-muted-foreground">{labels[key] || key}</p>
           <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{value}</p>
         </div>
@@ -18,14 +18,22 @@ function MetricCards({ metrics }) {
   );
 }
 
-function Bars({ title, data = [], color = "bg-emerald-500" }) {
-  const max = Math.max(1, ...data.map((item) => item.count));
+function Bars({ title, data = [], color = "bg-emerald-500", compact = false }) {
+  const total = data.reduce((sum, item) => sum + item.count, 0);
   const hasData = data.some((item) => item.count > 0);
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       {hasData ? (
-        data.map((item) => (
+        compact ? (
+          <div className="grid h-28 grid-flow-col auto-cols-fr items-end gap-px" aria-label={`${title}: ${data.map((item) => `${item.label}: ${item.count}`).join(", ")}`} role="img">
+            {data.map((item) => (
+              <div key={item.label || item.status} className="group relative h-full rounded-t bg-muted/60" title={`${item.label || item.status}: ${item.count}`}>
+                <div className={`absolute inset-x-0 bottom-0 rounded-t ${color}`} style={{ height: `${Math.max(4, (item.count / Math.max(1, ...data.map((entry) => entry.count))) * 100)}%` }} />
+              </div>
+            ))}
+          </div>
+        ) : data.map((item) => (
           <div key={item.label || item.status} className="space-y-1.5">
             <div className="flex justify-between text-xs text-muted-foreground font-medium">
               <span>{item.label || item.status}</span>
@@ -34,7 +42,7 @@ function Bars({ title, data = [], color = "bg-emerald-500" }) {
             <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
               <div
                 className={`h-2 rounded-full ${color} transition-all duration-300`}
-                style={{ width: `${(item.count / max) * 100}%` }}
+                style={{ width: `${(item.count / Math.max(total, 1)) * 100}%` }}
               />
             </div>
           </div>
@@ -84,7 +92,7 @@ export function AnalyticsPanel({ title, analytics, basePath }) {
             <CardTitle className="text-base font-semibold text-foreground">Appointments over time</CardTitle>
           </CardHeader>
           <CardContent>
-            <Bars title="Appointments" data={analytics.trend} />
+            <Bars title="Appointments" data={analytics.trend} compact />
           </CardContent>
         </Card>
         <Card className="border-border/80 dark:border-border shadow-xs">
@@ -115,7 +123,7 @@ export function AnalyticsPanel({ title, analytics, basePath }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Bars title="New users" data={analytics.userGrowth} color="bg-indigo-500" />
+            <Bars title="New users" data={analytics.userGrowth} color="bg-indigo-500" compact />
           </CardContent>
         </Card>
       )}

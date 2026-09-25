@@ -5,5 +5,5 @@ export default async function VideoCallPage({ searchParams }) {
   const { appointmentId } = await searchParams;
   const credentials = await getVideoCallCredentials(appointmentId);
 
-  return <VideoCall sessionId={credentials.videoSessionId} token={credentials.token} />;
+  return <VideoCall appId={credentials.appId} sessionId={credentials.videoSessionId} token={credentials.token} />;
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,21 +26,19 @@ export function SlotPicker({ days, onSelectSlot }) {
   };
 
   return (
-    <div className="space-y-6">
+    <section aria-label="Choose appointment time" className="space-y-6">
       <Tabs
         defaultValue={activeTab}
         onValueChange={setActiveTab}
         className="w-full"
       >
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="w-full justify-start gap-1 overflow-x-auto bg-muted/40 p-1" aria-label="Available appointment dates">
           {days.map((day) => (
             <TabsTrigger
               key={day.date}
               value={day.date}
               disabled={day.slots.length === 0}
-              className={
-                day.slots.length === 0 ? "opacity-50 cursor-not-allowed" : ""
-              }
+              className={day.slots.length === 0 ? "cursor-not-allowed opacity-50" : "data-active:bg-primary data-active:text-primary-foreground data-active:font-semibold data-active:shadow-sm"}
             >
               <div className="flex gap-2">
                 <div className=" opacity-80">
@@ -49,8 +47,8 @@ export function SlotPicker({ days, onSelectSlot }) {
                 <div>({format(new Date(day.date), "EEE")})</div>
               </div>
               {day.slots.length > 0 && (
-                <div className="ml-2 bg-emerald-900/30 text-emerald-400 text-xs px-2 py-1 rounded">
-                  {day.slots.length}
+                <div className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary data-active:bg-primary-foreground/20 data-active:text-primary-foreground">
+                  {day.slots.length} slots
                 </div>
               )}
             </TabsTrigger>
@@ -70,12 +68,14 @@ export function SlotPicker({ days, onSelectSlot }) {
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {day.slots.map((slot) => (
-                    <Card
+                    <Button
                       key={slot.startTime}
-                      className={`border-emerald-900/20 cursor-pointer transition-all ${
+                      type="button"
+                      variant={selectedSlot?.startTime === slot.startTime ? "default" : "outline"}
+                      className={`h-auto justify-start p-0 text-left ${
                         selectedSlot?.startTime === slot.startTime
-                          ? "bg-emerald-900/30 border-emerald-600"
-                          : "hover:border-emerald-700/40"
+                          ? ""
+                          : "hover:border-primary/40"
                       }`}
                       onClick={() => handleSlotSelect(slot)}
                     >
@@ -97,7 +97,7 @@ export function SlotPicker({ days, onSelectSlot }) {
                           {format(new Date(slot.startTime), "h:mm a")}
                         </span>
                       </CardContent>
-                    </Card>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -106,16 +106,17 @@ export function SlotPicker({ days, onSelectSlot }) {
         ))}
       </Tabs>
 
-      <div className="flex justify-end">
+      <div className="sticky bottom-0 -mx-2 flex justify-end border-t border-border bg-card/95 px-2 py-3 backdrop-blur sm:mx-0 sm:px-0">
         <Button
           onClick={confirmSelection}
           disabled={!selectedSlot}
-          className="bg-emerald-600 hover:bg-emerald-700"
+          size="lg"
+          className="w-full sm:min-w-48 sm:w-auto"
         >
           Continue
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </section>
   );
 }

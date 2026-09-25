@@ -92,7 +92,7 @@ export function AvailabilitySettings({ slots }) {
   };
 
   return (
-    <Card className="border-border/80 dark:border-border shadow-xs">
+    <Card className="border-border shadow-none">
       <CardHeader>
         <CardTitle className="text-xl font-bold text-foreground flex items-center">
           <Clock className="h-5 w-5 mr-2 text-emerald-600 dark:text-emerald-400" />
@@ -121,9 +121,9 @@ export function AvailabilitySettings({ slots }) {
                   {slots.map((slot) => (
                     <div
                       key={slot.id}
-                      className="flex items-center p-3 rounded-lg bg-muted/30 border border-border/80"
+                      className="flex items-center border-b border-border py-3 last:border-0"
                     >
-                      <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-2 rounded-lg mr-3">
+                      <div className="mr-3 rounded-md bg-primary/10 p-2">
                         <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       </div>
                       <div>
@@ -143,7 +143,7 @@ export function AvailabilitySettings({ slots }) {
 
             <Button
               onClick={() => setShowForm(true)}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+              className="w-full font-medium"
             >
               <Plus className="h-4 w-4 mr-2" />
               Set Availability Time
@@ -152,7 +152,7 @@ export function AvailabilitySettings({ slots }) {
         ) : (
           <form
             onSubmit={handleSubmit(onSubmit)}
-            className="space-y-4 border border-border/80 rounded-xl p-4 bg-muted/20"
+            className="space-y-4 border-t border-border pt-5"
           >
             <h3 className="text-base font-medium text-foreground mb-2">
               Set Daily Availability

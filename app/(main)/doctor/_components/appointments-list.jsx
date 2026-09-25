@@ -1,31 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
-import { getDoctorAppointments } from "@/actions/doctor";
+import { useRouter } from "next/navigation";
 import { AppointmentCard } from "@/components/ui/appointment-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
-import useFetch from "@/hooks/use-fetch";
 
-export default function DoctorAppointmentsList() {
-  const {
-    loading,
-    data,
-    fn: fetchAppointments,
-  } = useFetch(getDoctorAppointments);
-
-  useEffect(() => {
-    fetchAppointments();
-  }, []);
-
-  const appointments = data?.appointments || [];
+export default function DoctorAppointmentsList({ appointments = [] }) {
+  const loading = false;
+  const router = useRouter();
 
   return (
-    <Card className="border-border/80 dark:border-border shadow-xs">
+    <Card className="border-border shadow-none">
       <CardHeader>
         <CardTitle className="text-xl font-bold text-foreground flex items-center">
-          <Calendar className="h-5 w-5 mr-2 text-emerald-600 dark:text-emerald-400" />
-          Upcoming Appointments
+          <Calendar className="mr-2 h-5 w-5 text-primary" />
+          Appointments
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -34,13 +23,13 @@ export default function DoctorAppointmentsList() {
             <p className="text-sm text-muted-foreground">Loading appointments...</p>
           </div>
         ) : appointments.length > 0 ? (
-          <div className="space-y-4">
+            <div className="divide-y divide-border">
             {appointments.map((appointment) => (
               <AppointmentCard
                 key={appointment.id}
                 appointment={appointment}
                 userRole="DOCTOR"
-                refetchAppointments={fetchAppointments}
+                refetchAppointments={() => router.refresh()}
               />
             ))}
           </div>

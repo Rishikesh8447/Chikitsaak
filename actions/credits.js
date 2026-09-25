@@ -18,11 +18,12 @@ const APPOINTMENT_CREDIT_COST = 2;
  * Checks user's subscription and allocates monthly credits if needed
  * This should be called on app initialization (e.g., in a layout component)
  */
-export async function checkAndAllocateCredits(user) {
+export async function checkAndAllocateCredits() {
   try {
-    if (!user) {
-      return null;
-    }
+    const { userId: clerkUserId } = await auth();
+    if (!clerkUserId) return null;
+    const user = await db.user.findUnique({ where: { clerkUserId } });
+    if (!user) return null;
 
     // Only allocate credits for patients
     if (user.role !== "PATIENT") {
@@ -96,12 +97,12 @@ export async function checkAndAllocateCredits(user) {
 /**
  * Deducts credits for booking an appointment
  */
-export async function deductCreditsForAppointment(userId, doctorId) {
+export async function deductCreditsForAppointment(doctorId) {
   const { userId: clerkUserId } = await auth();
   if (!clerkUserId) return { success: false, error: "Unauthorized" };
   try {
     const result = await db.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId } });
+      const user = await tx.user.findUnique({ where: { clerkUserId } });
       const doctor = await tx.user.findUnique({ where: { id: doctorId } });
       if (!user || user.role !== "PATIENT" || user.clerkUserId !== clerkUserId) throw new Error("Patient not found");
       if (!doctor || doctor.role !== "DOCTOR") throw new Error("Doctor not found");
@@ -143,8 +144,11 @@ export async function deductCreditsForAppointment(userId, doctorId) {
 
     return { success: true, user: result };
   } catch (error) {
-    console.error("Failed to deduct credits:", error);
-    return { success: false, error: error.message };
+    console.error("Failed to deduct credits:", error instanceof Error ? error.message : "Unknown error");
+    const message = error instanceof Error && ["Insufficient credits to book an appointment", "Patient not found", "Doctor not found"].includes(error.message)
+      ? error.message
+      : "Unable to update credits right now";
+    return { success: false, error: message };
   }
 }
 

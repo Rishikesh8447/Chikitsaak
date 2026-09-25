@@ -47,8 +47,8 @@ export default async function RootLayout({ children }) {
 
             {/*footer*/}
 
-            <footer className="bg-muted/12-py">
-              <div className="container mx-auto px-4 text-center text-gray-200">
+            <footer className="border-t bg-muted/40">
+              <div className="container mx-auto px-4 py-6 text-center text-sm text-muted-foreground">
                 <p>Made by RISHI</p>
               </div>
             </footer>

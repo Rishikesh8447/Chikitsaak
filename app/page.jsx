@@ -5,25 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Pricing from "@/components/pricing";
-import { creditBenefits, features, testimonials } from "@/lib/data";
+import { creditBenefits, features } from "@/lib/data";
 
 export default function Home() {
   return (
-    <div className="bg-background">
+    <main className="bg-background">
       {/* Hero Section */}
       <section className="relative overflow-hidden py-16 sm:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8">
-              <Badge
-                variant="outline"
-                className="bg-emerald-500/10 border-emerald-500/30 px-4 py-2 text-emerald-600 dark:text-emerald-400 text-sm font-medium"
-              >
-                Healthcare made simple
+              <Badge variant="outline" className="border-primary/30 bg-primary/10 px-3 py-1 text-primary text-sm font-medium">
+                Healthcare made simpler
               </Badge>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white leading-tight">
-                Connect with doctors <br />
-                <span className="gradient-title">anytime, anywhere</span>
+              <h1 className="text-4xl font-semibold leading-tight tracking-tight md:text-5xl lg:text-6xl">
+                Find the right doctor,<br />
+                book your consultation,
+                <span className="block text-primary">and manage your care.</span>
               </h1>
               <p className="text-slate-600 dark:text-slate-300 text-lg md:text-xl max-w-md">
                 Book appointments, consult via video, and manage your healthcare
@@ -33,10 +31,10 @@ export default function Home() {
                 <Button
                   asChild
                   size="lg"
-                  className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
+                  className="shadow-none"
                 >
-                  <Link href="/onboarding">
-                    Get Started <ArrowRight className="ml-2 h-4 w-4" />
+                  <Link href="/doctors">
+                    Find a doctor <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
                 <Button
@@ -45,17 +43,18 @@ export default function Home() {
                   size="lg"
                   className="border-border hover:bg-muted"
                 >
-                  <Link href="/doctors">Find Doctors</Link>
+                  <Link href="/appointments">View appointments</Link>
                 </Button>
               </div>
             </div>
 
-            <div className="relative h-[360px] lg:h-[460px] rounded-2xl overflow-hidden shadow-xs border border-border">
+            <div className="relative h-[320px] overflow-hidden rounded-xl border border-border lg:h-[420px]">
               <Image
                 src="/banner2.png"
                 alt="Doctor consultation"
                 fill
                 priority
+                sizes="(max-width: 1024px) 100vw, 50vw"
                 className="object-cover md:pt-6 rounded-2xl"
               />
             </div>
@@ -130,7 +129,7 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-3">
+                <ul className="grid gap-3 md:grid-cols-2 md:gap-x-8">
                   {creditBenefits.map((benefit, index) => (
                     <li key={index} className="flex items-start">
                       <div className="mr-3 mt-1 bg-emerald-500/10 dark:bg-emerald-500/20 p-1 rounded-full shrink-0">
@@ -162,71 +161,20 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="py-16 sm:py-20 lg:py-24 bg-muted/40 border-y border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <Badge
-              variant="outline"
-              className="bg-emerald-500/10 border-emerald-500/30 px-4 py-1 text-emerald-600 dark:text-emerald-400 text-sm font-medium mb-4"
-            >
-              Success Stories
-            </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">
-              What Our Users Say
-            </h2>
-            <p className="text-slate-600 dark:text-slate-300 text-lg max-w-2xl mx-auto">
-              Hear from patients and doctors who use our platform
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <Card
-                key={index}
-                className="bg-card border-border hover:border-emerald-500/40 transition-all shadow-xs"
-              >
-                <CardContent className="pt-6">
-                  <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center mr-4 shrink-0">
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                        {testimonial.initials}
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-slate-900 dark:text-white">
-                        {testimonial.name}
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {testimonial.role}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
-                    &quot;{testimonial.quote}&quot;
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="py-16 sm:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Card className="bg-emerald-950 text-white border-emerald-800 shadow-lg">
-            <CardContent className="p-8 md:p-12 lg:p-16 relative overflow-hidden">
-              <div className="max-w-2xl relative z-10">
+            <CardContent className="relative flex min-h-80 items-center justify-center overflow-hidden p-8 text-center md:p-12 lg:p-16">
+              <div className="relative z-10 mx-auto max-w-2xl">
                 <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
                   Ready to take control of your healthcare?
                 </h2>
                 <p className="text-lg text-emerald-100/90 mb-8">
-                  Join thousands of users who have simplified their healthcare
-                  journey with our platform. Get started today and experience
-                  healthcare the way it should be.
+                  Find a doctor, schedule a consultation, and keep your care
+                  information organized in one place.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col justify-center gap-4 sm:flex-row">
                   <Button
                     asChild
                     size="lg"
@@ -236,9 +184,9 @@ export default function Home() {
                   </Button>
                   <Button
                     asChild
-                    variant="outline"
+                    variant="ghost"
                     size="lg"
-                    className="border-emerald-700/60 text-white hover:bg-emerald-900/60"
+                    className="text-white hover:bg-emerald-900/60 hover:text-white"
                   >
                     <Link href="#pricing">View Pricing</Link>
                   </Button>
@@ -252,6 +200,6 @@ export default function Home() {
           </Card>
         </div>
       </section>
-    </div>
+    </main>
   );
 }
