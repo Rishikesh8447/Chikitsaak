@@ -8,6 +8,7 @@ import { addDays, addMinutes, format, endOfDay } from "date-fns";
 import { Auth } from "@vonage/auth";
 import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { resolveDoctorPublicNames } from "@/lib/doctor-name";
+import { getVideoJoinWindowError } from "@/lib/appointment-time.mjs";
 
 const BOOKING_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const VIDEO_STATUSES = ["CONFIRMED", "IN_PROGRESS"];
@@ -163,19 +164,12 @@ export async function authorizeVideoCall(formData) {
       throw new Error(appointment.status === "SCHEDULED" ? "Waiting for doctor confirmation" : "This appointment is not available for video consultation");
     }
 
-    // Verify the appointment is within a valid time range (e.g., starting 5 minutes before scheduled time)
     const now = new Date();
-    const appointmentTime = new Date(appointment.startTime);
-    const timeDifference = (appointmentTime - now) / (1000 * 60); // difference in minutes
-
-    if (timeDifference > 30 || now > new Date(appointment.endTime)) {
-      throw new Error(
-        timeDifference > 30 ? "The call will be available 30 minutes before the scheduled time" : "This appointment has ended"
-      );
-    }
+    const joinWindowError = getVideoJoinWindowError(appointment.startTime, appointment.endTime, now);
+    if (joinWindowError) throw new Error(joinWindowError);
 
     await ensureVideoSession(appointment);
-    if (appointment.status === "CONFIRMED" && appointment.doctorId === user.id && now >= appointmentTime) {
+    if (appointment.status === "CONFIRMED" && appointment.doctorId === user.id && now >= new Date(appointment.startTime)) {
       const started = await db.appointment.updateMany({ where: { id: appointment.id, status: "CONFIRMED" }, data: { status: "IN_PROGRESS" } });
       if (started.count === 1) revalidatePath("/appointments");
     }
@@ -190,13 +184,12 @@ export async function getVideoCallCredentials(appointmentId) {
   if (!userId || typeof appointmentId !== "string") throw new Error("Unauthorized");
   const user = await db.user.findUnique({ where: { clerkUserId: userId } });
   const appointment = await db.appointment.findUnique({ where: { id: appointmentId } });
-  console.info("Video credentials debug", { appointmentId, status: appointment?.status, hasSessionId: Boolean(appointment?.videoSessionId), hasVonageAppId: Boolean(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID), hasPrivateKey: Boolean(process.env.VONAGE_PRIVATE_KEY) });
   if (!user || !appointment || (appointment.doctorId !== user.id && appointment.patientId !== user.id)) throw new Error("You are not authorized to join this call");
   if (user.role === "DOCTOR" && user.verificationStatus !== "VERIFIED") throw new Error("Doctor verification is required to join calls");
   if (!VIDEO_STATUSES.includes(appointment.status)) throw new Error(appointment.status === "SCHEDULED" ? "Waiting for doctor confirmation" : "This appointment is not available for video consultation");
   const now = new Date();
-  if ((new Date(appointment.startTime) - now) / 60000 > 30) throw new Error("The video call is not currently available");
-  if (now >= new Date(appointment.endTime)) throw new Error("This appointment has ended");
+  const joinWindowError = getVideoJoinWindowError(appointment.startTime, appointment.endTime, now);
+  if (joinWindowError) throw new Error(joinWindowError === "The call will be available 30 minutes before the scheduled time" ? "The video call is not currently available" : joinWindowError);
   const sessionId = await ensureVideoSession(appointment);
   if (appointment.status === "CONFIRMED" && appointment.doctorId === user.id && now >= new Date(appointment.startTime)) {
     const started = await db.appointment.updateMany({ where: { id: appointment.id, status: "CONFIRMED" }, data: { status: "IN_PROGRESS" } });
@@ -297,6 +290,8 @@ export async function rescheduleAppointment(formData) {
     const appointment = await tx.appointment.findUnique({ where: { id: appointmentId } });
     if (!patient || !appointment || appointment.patientId !== patient.id) throw new Error("Appointment not found or not authorized");
     if (!["SCHEDULED", "CONFIRMED"].includes(appointment.status)) throw new Error("This appointment cannot be rescheduled");
+    const doctor = await tx.user.findUnique({ where: { id: appointment.doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true } });
+    if (!doctor) throw new Error("Doctor not found or not verified");
     const windows = await tx.availability.findMany({ where: { doctorId: appointment.doctorId, status: "AVAILABLE" } });
     const minutes = (value) => value.getHours() * 60 + value.getMinutes();
     const day = startTime.getDay();

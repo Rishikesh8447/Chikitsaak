@@ -24,7 +24,8 @@ export async function getMyNotifications() {
 export async function markNotificationRead(notificationId) {
   const user = await currentDatabaseUser();
   if (typeof notificationId !== "string") throw new Error("Invalid notification");
-  await db.notification.updateMany({ where: { id: notificationId, userId: user.id }, data: { readAt: new Date() } });
+  const changed = await db.notification.updateMany({ where: { id: notificationId, userId: user.id }, data: { readAt: new Date() } });
+  if (changed.count !== 1) throw new Error("Notification not found");
   revalidatePath("/");
   return { success: true };
 }

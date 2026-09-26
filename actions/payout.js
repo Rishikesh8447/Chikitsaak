@@ -3,13 +3,36 @@
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { getPayoutEligibleCredits } from "@/lib/payout-eligibility.mjs";
 
 const CREDIT_VALUE = 10; // $10 per credit total
 const PLATFORM_FEE_PER_CREDIT = 2; // $2 platform fee
 const DOCTOR_EARNINGS_PER_CREDIT = 8; // $8 to doctor
+const PAYOUT_CONSUMING_STATUSES = ["PROCESSING", "PROCESSED", "COMPLETED"];
+
+async function getEligibleDoctorCredits(tx, doctor) {
+  const [completedAppointments, payouts] = await Promise.all([
+    tx.appointment.count({
+      where: { doctorId: doctor.id, status: "COMPLETED" },
+    }),
+    tx.payout.findMany({
+      where: {
+        doctorId: doctor.id,
+        status: { in: PAYOUT_CONSUMING_STATUSES },
+      },
+      select: { credits: true },
+    }),
+  ]);
+
+  return getPayoutEligibleCredits({
+    availableCredits: doctor.credits,
+    completedAppointments,
+    payouts,
+  });
+}
 
 /**
- * Request payout for all remaining credits
+ * Request payout for eligible completed-appointment credits
  */
 export async function requestPayout(formData) {
   const { userId } = await auth();
@@ -20,19 +43,29 @@ export async function requestPayout(formData) {
 
   try {
     const paypalEmail = formData.get("paypalEmail");
-    if (typeof paypalEmail !== "string" || !paypalEmail.trim() || paypalEmail.length > 254) {
+    if (typeof paypalEmail !== "string" || !paypalEmail.trim()) {
       throw new Error("PayPal email is required");
+    }
+    const normalizedPaypalEmail = paypalEmail.trim();
+    if (
+      normalizedPaypalEmail.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedPaypalEmail)
+    ) {
+      throw new Error("PayPal email is invalid");
     }
     const payout = await db.$transaction(async (tx) => {
       const doctor = await tx.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
       if (!doctor) throw new Error("Doctor not found or not verified");
       const existing = await tx.payout.findFirst({ where: { doctorId: doctor.id, status: "PROCESSING" } });
       if (existing) throw new Error("You already have a pending payout request");
-      const creditCount = doctor.credits;
+      const creditCount = await getEligibleDoctorCredits(tx, doctor);
       if (creditCount < 1) throw new Error("No credits available for payout");
-      const reserved = await tx.user.updateMany({ where: { id: doctor.id, credits: creditCount }, data: { credits: 0 } });
+      const reserved = await tx.user.updateMany({
+        where: { id: doctor.id, credits: doctor.credits },
+        data: { credits: { decrement: creditCount } },
+      });
       if (reserved.count !== 1) throw new Error("Credit balance changed. Please try again.");
-      const payout = await tx.payout.create({ data: { doctorId: doctor.id, amount: creditCount * CREDIT_VALUE, credits: creditCount, platformFee: creditCount * PLATFORM_FEE_PER_CREDIT, netAmount: creditCount * DOCTOR_EARNINGS_PER_CREDIT, paypalEmail: paypalEmail.trim(), status: "PROCESSING" } });
+      const payout = await tx.payout.create({ data: { doctorId: doctor.id, amount: creditCount * CREDIT_VALUE, credits: creditCount, platformFee: creditCount * PLATFORM_FEE_PER_CREDIT, netAmount: creditCount * DOCTOR_EARNINGS_PER_CREDIT, paypalEmail: normalizedPaypalEmail, status: "PROCESSING" } });
       await tx.creditTransaction.create({ data: { userId: doctor.id, amount: -creditCount, type: "ADMIN_ADJUSTMENT", allocationKey: `payout:${payout.id}:credit-reservation` } });
       return payout;
     }, { isolationLevel: "Serializable" });
@@ -41,7 +74,7 @@ export async function requestPayout(formData) {
     return { success: true, payout };
   } catch (error) {
     console.error("Failed to request payout:", error);
-    const message = error instanceof Error && ["PayPal email is required", "Doctor not found or not verified", "You already have a pending payout request", "No credits available for payout", "Credit balance changed. Please try again."].includes(error.message) ? error.message : "Failed to request payout. Please try again.";
+    const message = error instanceof Error && ["PayPal email is required", "PayPal email is invalid", "Doctor not found or not verified", "You already have a pending payout request", "No credits available for payout", "Credit balance changed. Please try again."].includes(error.message) ? error.message : "Failed to request payout. Please try again.";
     throw new Error(message);
   }
 }
@@ -135,7 +168,8 @@ export async function getDoctorEarnings() {
     const averageEarningsPerMonth = totalEarnings > 0 ? totalEarnings / Math.max(1, new Date().getMonth() + 1) : 0;
 
     // Get current credit balance for payout calculations
-    const availableCredits = doctor.credits;
+    const eligibleCredits = await getEligibleDoctorCredits(db, doctor);
+    const availableCredits = eligibleCredits;
     const availablePayout = availableCredits * DOCTOR_EARNINGS_PER_CREDIT;
 
     return {

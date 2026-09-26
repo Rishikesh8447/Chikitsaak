@@ -67,17 +67,38 @@ export async function getPatientAnalytics(range) {
 }
 
 export async function getAdminAnalytics(range) {
-  const user = await currentUser();
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  let user;
+  try {
+    user = await db.user.findUnique({
+      where: { clerkUserId: userId },
+      select: { id: true, role: true },
+    });
+  } catch {
+    console.error("Failed to authorize admin analytics.");
+    throw new Error("Failed to authorize analytics access. Please try again.");
+  }
+  if (!user) throw new Error("User not found");
   if (user.role !== "ADMIN") throw new Error("Only admins can access admin analytics");
-  const window = rangeWindow(range);
-  const appointmentWhere = { startTime: { gte: window.from, lte: window.to } };
-  const [users, appointments, verification, userGrowth] = await Promise.all([
-    db.user.groupBy({ by: ["role"], _count: { _all: true } }),
-    db.appointment.findMany({ where: appointmentWhere, select: { startTime: true, status: true } }),
-    db.user.groupBy({ by: ["verificationStatus"], _count: { _all: true } }),
-    db.user.findMany({ where: { createdAt: { gte: window.from, lte: window.to } }, select: { createdAt: true } }),
-  ]);
-  const roleCount = (role) => users.find((item) => item.role === role)?._count._all || 0;
-  const verificationCounts = verification.map((item) => ({ status: item.verificationStatus || "UNSET", count: item._count._all }));
-  return { range: window.days, metrics: { users: users.reduce((sum, item) => sum + item._count._all, 0), doctors: roleCount("DOCTOR"), patients: roleCount("PATIENT"), totalAppointments: appointments.length, completed: appointments.filter((item) => item.status === "COMPLETED").length, cancelled: appointments.filter((item) => item.status === "CANCELLED").length, upcoming: appointments.filter((item) => ACTIVE_STATUSES.includes(item.status) && new Date(item.startTime) >= new Date()).length }, trend: trend(appointments, window.from, window.days), userGrowth: trend(userGrowth.map((item) => ({ startTime: item.createdAt, status: "USER" })), window.from, window.days), statuses: statusCounts(appointments), verification: verificationCounts };
+  try {
+    const window = rangeWindow(range);
+    const appointmentWhere = { startTime: { gte: window.from, lte: window.to } };
+    const [users, appointments, verification, userGrowth] = await Promise.all([
+      db.user.groupBy({ by: ["role"], _count: { _all: true } }),
+      db.appointment.findMany({ where: appointmentWhere, select: { startTime: true, status: true } }),
+      db.user.groupBy({
+        by: ["verificationStatus"],
+        where: { role: "DOCTOR" },
+        _count: { _all: true },
+      }),
+      db.user.findMany({ where: { createdAt: { gte: window.from, lte: window.to } }, select: { createdAt: true } }),
+    ]);
+    const roleCount = (role) => users.find((item) => item.role === role)?._count._all || 0;
+    const verificationCounts = verification.map((item) => ({ status: item.verificationStatus || "UNSET", count: item._count._all }));
+    return { range: window.days, metrics: { users: users.reduce((sum, item) => sum + item._count._all, 0), doctors: roleCount("DOCTOR"), patients: roleCount("PATIENT"), totalAppointments: appointments.length, completed: appointments.filter((item) => item.status === "COMPLETED").length, cancelled: appointments.filter((item) => item.status === "CANCELLED").length, upcoming: appointments.filter((item) => ACTIVE_STATUSES.includes(item.status) && new Date(item.startTime) >= new Date()).length }, trend: trend(appointments, window.from, window.days), userGrowth: trend(userGrowth.map((item) => ({ startTime: item.createdAt, status: "USER" })), window.from, window.days), statuses: statusCounts(appointments), verification: verificationCounts };
+  } catch {
+    console.error("Failed to fetch admin analytics.");
+    throw new Error("Failed to fetch admin analytics. Please try again.");
+  }
 }

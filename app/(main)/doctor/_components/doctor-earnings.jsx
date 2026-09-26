@@ -206,8 +206,8 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                   <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <AlertDescription className="text-xs text-muted-foreground">
                     Your payout request is queued for manual processing. You&apos;ll receive the
-                    payment once an admin approves it. Your credits will be
-                    deducted after processing.
+                    payment once an admin approves it. Eligible credits are
+                    reserved immediately and returned if the request is declined.
                   </AlertDescription>
                 </Alert>
               </div>
@@ -237,7 +237,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 onClick={() => setShowPayoutDialog(true)}
                 className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
               >
-                Request Payout for All Credits
+                Request Payout for All Eligible Credits
               </Button>
             )}
 
@@ -256,8 +256,8 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
             <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <AlertDescription className="text-xs text-muted-foreground">
               <strong className="text-foreground">Payout Structure:</strong> You earn $8 per credit.
-              Platform fee is $2 per credit. Payouts include all your available
-              credits and are processed via PayPal.
+              Platform fee is $2 per credit. Payouts include completed,
+              unpaid appointment credits and are processed manually via PayPal.
             </AlertDescription>
           </Alert>
 
@@ -359,9 +359,9 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
             <Alert className="border-border/80">
               <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <AlertDescription className="text-xs text-muted-foreground">
-                Once processed by admin, {availableCredits} credits will be
-                deducted from your account and ${availablePayout.toFixed(2)}{" "}
-                will be sent to your PayPal.
+                {availableCredits} eligible credits will be reserved when you
+                submit this request. If an admin declines it, the credits will
+                return to your balance. The net payout is ${availablePayout.toFixed(2)}.
               </AlertDescription>
             </Alert>
 

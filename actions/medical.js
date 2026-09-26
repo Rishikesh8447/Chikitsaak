@@ -46,7 +46,7 @@ export async function createPrescription(formData) {
   const medicines = parseMedicines(formData.get("medicines"));
 
   try {
-    const prescription = await db.$transaction(async (tx) => {
+    await db.$transaction(async (tx) => {
       const appointment = await tx.appointment.findUnique({ where: { id: appointmentId }, include: { patient: true, doctor: true } });
       if (!appointment || appointment.doctorId !== doctor.id) throw new Error("Appointment not found or not authorized");
       if (!activeConsultationStatuses.includes(appointment.status)) throw new Error("A prescription requires an active or completed consultation");
@@ -64,12 +64,11 @@ export async function createPrescription(formData) {
         message: `Dr. ${doctor.name || "your doctor"} added a prescription to your consultation.`,
         dedupeKey: `prescription:${created.id}:patient-notification`,
       });
-      return created;
     });
     revalidatePath("/medical-records");
     revalidatePath("/appointments");
     revalidatePath("/doctor");
-    return { success: true, prescription };
+    return { success: true };
   } catch (error) {
     throw new Error("Failed to create prescription. Please try again.");
   }
@@ -80,7 +79,17 @@ export async function getMyMedicalRecords() {
   if (user.role !== "PATIENT") throw new Error("Only patients can access medical records");
   const [profile, appointments, prescriptions] = await Promise.all([
     db.user.findUnique({ where: { id: user.id }, select: { bloodGroup: true, allergies: true, existingConditions: true, currentMedications: true } }),
-    db.appointment.findMany({ where: { patientId: user.id }, include: { doctor: { select: { name: true, specialty: true } } }, orderBy: { startTime: "desc" } }),
+    db.appointment.findMany({
+      where: { patientId: user.id },
+      select: {
+        id: true,
+        startTime: true,
+        status: true,
+        notes: true,
+        doctor: { select: { name: true, specialty: true } },
+      },
+      orderBy: { startTime: "desc" },
+    }),
     db.prescription.findMany({ where: { patientId: user.id }, include: { doctor: { select: { name: true, specialty: true } }, appointment: { select: { startTime: true } }, medicines: true }, orderBy: { createdAt: "desc" } }),
   ]);
   return { profile, appointments, prescriptions };
@@ -133,7 +142,15 @@ export async function createReview(formData) {
 export async function getAppointmentPrescription(appointmentId) {
   const user = await authenticatedUser();
   if (typeof appointmentId !== "string") throw new Error("Appointment is required");
-  const prescription = await db.prescription.findFirst({ where: { appointmentId, OR: [{ patientId: user.id }, { doctorId: user.id }] }, include: { medicines: true, doctor: { select: { name: true } }, patient: { select: { name: true } }, appointment: { select: { startTime: true } } } });
+  let ownerFilter;
+  if (user.role === "PATIENT") {
+    ownerFilter = { patientId: user.id };
+  } else if (user.role === "DOCTOR" && user.verificationStatus === "VERIFIED") {
+    ownerFilter = { doctorId: user.id };
+  } else {
+    throw new Error("Unauthorized");
+  }
+  const prescription = await db.prescription.findFirst({ where: { appointmentId, ...ownerFilter }, include: { medicines: true, doctor: { select: { name: true } }, patient: { select: { name: true } }, appointment: { select: { startTime: true } } } });
   if (!prescription) throw new Error("Prescription not found");
   return { prescription };
 }

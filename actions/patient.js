@@ -30,7 +30,14 @@ export async function getPatientAppointments() {
       where: {
         patientId: user.id,
       },
-      include: {
+      select: {
+        id: true,
+        doctorId: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        notes: true,
+        patientDescription: true,
         doctor: {
           select: {
             id: true,
@@ -39,8 +46,7 @@ export async function getPatientAppointments() {
             imageUrl: true,
           },
         },
-        review: true,
-        prescription: { include: { medicines: true } },
+        review: { select: { id: true, rating: true, comment: true } },
       },
       orderBy: {
         startTime: "asc",

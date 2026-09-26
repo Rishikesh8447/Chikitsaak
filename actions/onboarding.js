@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { checkUser } from "@/lib/checkUser";
+import { assertInitialRoleAssignment, persistInitialRoleAssignment, ROLE_ALREADY_ASSIGNED } from "@/lib/onboarding-role-assignment.mjs";
 
 
 export async function setUserRole (formData){
@@ -14,22 +15,15 @@ export async function setUserRole (formData){
     }
 // Find or create User in our Database
 const user = await checkUser();
-if(!user || user.clerkUserId !== userId) throw new Error ("User not found in database");
-
 const role = formData.get("role");
-
- if (!role || !["PATIENT", "DOCTOR"].includes(role)) {
-    throw new Error("Invalid role selection");}
+assertInitialRoleAssignment({ userId, user, role });
     try {
         if(role==="PATIENT"){
-            await db.user.update({
-        where: {
-          clerkUserId: userId,
-        },
-        data: {
-          role: "PATIENT",
-        },
-      });
+            await persistInitialRoleAssignment({
+              userId,
+              data: { role: "PATIENT" },
+              updateUser: (args) => db.user.updateMany(args),
+            });
 
       revalidatePath("/");
       return { success: true, redirect: "/doctors" };
@@ -50,11 +44,9 @@ const role = formData.get("role");
         throw new Error("All professional and location fields are required");
       }
 
-        await db.user.update({
-        where: {
-          clerkUserId: userId,
-        },
-        data: {
+        await persistInitialRoleAssignment({
+          userId,
+          data: {
           role: "DOCTOR",
           specialty,
           experience,
@@ -65,13 +57,15 @@ const role = formData.get("role");
           country,
           verificationStatus: "PENDING",
         },
-      });
+          updateUser: (args) => db.user.updateMany(args),
+        });
 
         revalidatePath("/");
       return { success: true, redirect: "/doctor/verification" };
     }
     } catch (error) {
       console.error("Failed to set user role:", error);
+      if (error instanceof Error && error.message === ROLE_ALREADY_ASSIGNED) throw error;
       throw new Error("Failed to update user profile. Please try again.");
     }
 }

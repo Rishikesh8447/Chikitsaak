@@ -5,6 +5,7 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";
+import { cancelAppointmentInTransaction, CANCELLATION_ERRORS } from "@/lib/appointment-cancellation.mjs";
 
 /**
  * Set doctor's availability slots
@@ -192,68 +193,21 @@ export async function cancelAppointment(formData) {
       throw new Error("Appointment ID is required");
     }
 
-    // Find the appointment with both patient and doctor details
-    const appointment = await db.appointment.findUnique({
-      where: {
-        id: appointmentId,
-      },
-      include: {
-        patient: true,
-        doctor: true,
-      },
-    });
-
-    if (!appointment) {
-      throw new Error("Appointment not found");
-    }
-
-    // Verify the user is either the doctor or the patient for this appointment
-    if (appointment.doctorId !== user.id && appointment.patientId !== user.id) {
-      throw new Error("You are not authorized to cancel this appointment");
-    }
-
-    // Perform cancellation in a transaction
-    await db.$transaction(async (tx) => {
-      const cancelled = await tx.appointment.updateMany({ where: { id: appointmentId, status: { in: ["SCHEDULED", "CONFIRMED"] } }, data: { status: "CANCELLED" } });
-      if (cancelled.count !== 1) throw new Error("This appointment cannot be cancelled");
-
-      // Always refund credits to patient and deduct from doctor
-      // Create credit transaction for patient (refund)
-      await tx.creditTransaction.create({
-        data: {
-          userId: appointment.patientId,
-          amount: 2,
-          type: "APPOINTMENT_REFUND",
-          allocationKey: `appointment:${appointment.id}:patient-refund`,
-        },
-      });
-
-      // Create credit transaction for doctor (deduction)
-      await tx.creditTransaction.create({
-        data: {
-          userId: appointment.doctorId,
-          amount: -2,
-          type: "APPOINTMENT_REFUND",
-          allocationKey: `appointment:${appointment.id}:doctor-refund`,
-        },
-      });
-
-      // Update patient's credit balance (increment)
-      await tx.user.update({
-        where: {
-          id: appointment.patientId,
-        },
-        data: {
-          credits: {
-            increment: 2,
-          },
-        },
-      });
-
-      const doctorDebit = await tx.user.updateMany({ where: { id: appointment.doctorId, credits: { gte: 2 } }, data: { credits: { decrement: 2 } } });
-      if (doctorDebit.count !== 1) throw new Error("Doctor credit balance cannot become negative");
-      await createAppointmentNotificationPair(tx, appointment, { type: "APPOINTMENT_CANCELLED", title: "Appointment cancelled", patientMessage: "Your appointment was cancelled.", doctorMessage: "An appointment was cancelled.", key: `appointment:${appointment.id}:cancelled` });
-    });
+    // Resolve ownership and accounting from the transaction's consistent database view.
+    await db.$transaction(
+      (tx) => cancelAppointmentInTransaction(tx, {
+        appointmentId,
+        actorId: user.id,
+        notify: (transaction, appointment) => createAppointmentNotificationPair(transaction, appointment, {
+          type: "APPOINTMENT_CANCELLED",
+          title: "Appointment cancelled",
+          patientMessage: "Your appointment was cancelled.",
+          doctorMessage: "An appointment was cancelled.",
+          key: `appointment:${appointment.id}:cancelled`,
+        }),
+      }),
+      { isolationLevel: "Serializable" }
+    );
 
     // Determine which path to revalidate based on user role
     if (user.role === "DOCTOR") {
@@ -265,6 +219,9 @@ export async function cancelAppointment(formData) {
     return { success: true };
   } catch (error) {
     console.error("Failed to cancel appointment:", error);
+    if (error instanceof Error && Object.values(CANCELLATION_ERRORS).includes(error.message)) {
+      throw error;
+    }
     throw new Error("Failed to cancel appointment. Please try again.");
   }
 }
@@ -312,7 +269,7 @@ export async function addAppointmentNotes(formData) {
     }
 
     // Update the appointment notes
-    const updatedAppointment = await db.appointment.update({
+    await db.appointment.update({
       where: {
         id: appointmentId,
       },
@@ -322,9 +279,9 @@ export async function addAppointmentNotes(formData) {
     });
 
     revalidatePath("/doctor");
-    return { success: true, appointment: updatedAppointment };
+    return { success: true };
   } catch (error) {
-    console.error("Failed to add appointment notes:", error);
+    console.error("Failed to update appointment notes");
     throw new Error("Failed to update notes. Please try again.");
   }
 }
@@ -414,7 +371,8 @@ export async function updateAppointmentStatus(formData) {
   if (typeof appointmentId !== "string" || typeof nextStatus !== "string") throw new Error("Invalid status update");
   const actor = await db.user.findUnique({ where: { clerkUserId: userId } });
   if (!actor || actor.role !== "DOCTOR" || actor.verificationStatus !== "VERIFIED") throw new Error("Not authorized");
-  if (!["CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"].includes(nextStatus)) throw new Error("Invalid appointment status");
+  // Cancellation must use cancelAppointment so its refund and ledger work cannot be bypassed.
+  if (!["CONFIRMED", "IN_PROGRESS", "COMPLETED", "NO_SHOW"].includes(nextStatus)) throw new Error("Invalid appointment status");
   const appointment = await db.appointment.findUnique({ where: { id: appointmentId, doctorId: actor.id } });
   if (!appointment || !canTransitionAppointment(appointment.status, nextStatus)) throw new Error("Invalid appointment status transition");
   const now = new Date();

@@ -26,12 +26,13 @@ async function currentUser(role) {
   if (!userId) throw new Error("Unauthorized");
   let user;
   try {
-    user = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true } });
+    user = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true, verificationStatus: true } });
   } catch (error) {
     console.error("AI database dependency unavailable:", error instanceof Error ? error.message : "Unknown error");
     throw new Error("AI assistance is temporarily unavailable because the database cannot be reached");
   }
   if (!user || (role && user.role !== role)) throw new Error("Unauthorized");
+  if (role === "DOCTOR" && user.verificationStatus !== "VERIFIED") throw new Error("Unauthorized");
   return user;
 }
 

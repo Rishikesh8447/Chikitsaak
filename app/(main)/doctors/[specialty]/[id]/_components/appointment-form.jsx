@@ -10,6 +10,7 @@ import { bookAppointment } from "@/actions/appointments";
 import { toast } from "sonner";
 import useFetch from "@/hooks/use-fetch";
 import { AiPreconsultation } from "@/components/ai-preconsultation";
+import { formatLocalSlotRange } from "@/lib/appointment-time.mjs";
 
 export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
   const [description, setDescription] = useState("");
@@ -57,7 +58,7 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
         </div>
         <div className="flex items-center">
           <Clock className="mr-2 h-5 w-5 text-primary" />
-          <span className="text-white">{slot.formatted}</span>
+          <span className="text-white">{formatLocalSlotRange(slot.startTime, slot.endTime)}</span>
         </div>
         <div className="flex items-center">
           <CreditCard className="mr-2 h-5 w-5 text-primary" />

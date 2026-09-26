@@ -11,6 +11,31 @@ const PLAN_CREDITS = {
   premium: 24, // Premium plan: 24 credits per month
 };
 
+const PLAN_PRIORITY = ["premium", "standard", "free_user"];
+
+function getEntitledPlan(has) {
+  return PLAN_PRIORITY.find((plan) => has({ plan })) || null;
+}
+
+/** Read the authenticated patient's current Clerk plan entitlement server-side. */
+export async function getMyCreditPlan() {
+  const { userId, has } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const user = await db.user.findUnique({
+    where: { clerkUserId: userId },
+    select: { role: true },
+  });
+  if (!user) throw new Error("User not found");
+  if (user.role !== "PATIENT") return { plan: null, monthlyCredits: null };
+
+  const plan = getEntitledPlan(has);
+  return {
+    plan,
+    monthlyCredits: plan ? PLAN_CREDITS[plan] : null,
+  };
+}
+
 
 /**
  * Checks user's subscription and allocates monthly credits if needed
@@ -28,35 +53,32 @@ export async function checkAndAllocateCredits() {
       return user;
     }
 
-    // Check if user has a subscription
+    // Plan entitlement comes from Clerk; the balance and grant ledger stay in Prisma.
     const { has } = await auth();
-
-    // Check which plan the user has
-    const hasBasic = has({ plan: "free_user" });
-    const hasStandard = has({ plan: "standard" });
-    const hasPremium = has({ plan: "premium" });
-
-    let currentPlan = null;
-    let creditsToAllocate = 0;
-
-    if (hasPremium) {
-      currentPlan = "premium";
-      creditsToAllocate = PLAN_CREDITS.premium;
-    } else if (hasStandard) {
-      currentPlan = "standard";
-      creditsToAllocate = PLAN_CREDITS.standard;
-    } else if (hasBasic) {
-      currentPlan = "free_user";
-      creditsToAllocate = PLAN_CREDITS.free_user;
-    }
+    const currentPlan = getEntitledPlan(has);
+    const creditsToAllocate = currentPlan ? PLAN_CREDITS[currentPlan] : 0;
 
     // If user doesn't have any plan, just return the user
     if (!currentPlan) {
       return user;
     }
 
-    const allocationKey = `${user.id}:${currentPlan}:${new Date().toISOString().slice(0, 7)}`;
+    const billingMonth = new Date().toISOString().slice(0, 7);
+    const allocationKey = `${user.id}:monthly:${billingMonth}`;
+    const previousPlanAllocationKeys = Object.keys(PLAN_CREDITS).map(
+      (plan) => `${user.id}:${plan}:${billingMonth}`
+    );
     const updatedUser = await db.$transaction(async (tx) => {
+      // Respect allocations made earlier this month with the former plan-specific key.
+      const previousAllocation = await tx.creditTransaction.findFirst({
+        where: {
+          userId: user.id,
+          type: "CREDIT_PURCHASE",
+          allocationKey: { in: previousPlanAllocationKeys },
+        },
+      });
+      if (previousAllocation) return user;
+
       const allocation = await tx.creditTransaction.createMany({
         data: [{ userId: user.id, amount: creditsToAllocate, type: "CREDIT_PURCHASE", packageId: currentPlan, allocationKey }],
         skipDuplicates: true,

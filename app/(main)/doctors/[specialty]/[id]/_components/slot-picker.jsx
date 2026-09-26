@@ -6,13 +6,15 @@ import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { groupSlotsByLocalDate, parseLocalCalendarDate } from "@/lib/appointment-time.mjs";
 
 export function SlotPicker({ days, onSelectSlot }) {
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const localDays = groupSlotsByLocalDate(days);
 
   // Find first day with slots as default tab
   const firstDayWithSlots =
-    days.find((day) => day.slots.length > 0)?.date || days[0]?.date;
+    localDays.find((day) => day.slots.length > 0)?.date || localDays[0]?.date;
   const [activeTab, setActiveTab] = useState(firstDayWithSlots);
 
   const handleSlotSelect = (slot) => {
@@ -33,7 +35,7 @@ export function SlotPicker({ days, onSelectSlot }) {
         className="w-full"
       >
         <TabsList className="w-full justify-start gap-1 overflow-x-auto bg-muted/40 p-1" aria-label="Available appointment dates">
-          {days.map((day) => (
+          {localDays.map((day) => (
             <TabsTrigger
               key={day.date}
               value={day.date}
@@ -42,9 +44,9 @@ export function SlotPicker({ days, onSelectSlot }) {
             >
               <div className="flex gap-2">
                 <div className=" opacity-80">
-                  {format(new Date(day.date), "MMM d")}
+                  {format(parseLocalCalendarDate(day.date), "MMM d")}
                 </div>
-                <div>({format(new Date(day.date), "EEE")})</div>
+                <div>({format(parseLocalCalendarDate(day.date), "EEE")})</div>
               </div>
               {day.slots.length > 0 && (
                 <div className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary data-active:bg-primary-foreground/20 data-active:text-primary-foreground">
@@ -55,7 +57,7 @@ export function SlotPicker({ days, onSelectSlot }) {
           ))}
         </TabsList>
 
-        {days.map((day) => (
+        {localDays.map((day) => (
           <TabsContent key={day.date} value={day.date} className="pt-4">
             {day.slots.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
