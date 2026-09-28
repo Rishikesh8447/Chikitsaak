@@ -216,7 +216,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
         </p>
         <Button
           onClick={() => router.push("/appointments")}
-          className="bg-emerald-600 hover:bg-emerald-700"
+          className="bg-primary hover:bg-primary/90"
         >
           Back to Appointments
         </Button>
@@ -259,7 +259,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
           </div>
         ) : isLoading && !scriptLoaded ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="h-12 w-12 text-emerald-400 animate-spin mb-4" />
+            <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
             <p className="text-white text-lg">
               Loading video call components...
             </p>
@@ -269,7 +269,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
               {/* Publisher (Your video) */}
               <div className="order-2 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border">
-                <div className="bg-emerald-900/10 px-3 py-2 text-emerald-400 text-sm font-medium">
+                <div className="bg-emerald-900/10 px-3 py-2 text-primary text-sm font-medium">
                   You
                 </div>
                 <div
@@ -279,7 +279,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
                   {!scriptLoaded && (
                     <div className="flex items-center justify-center h-full">
                       <div className="bg-muted/20 rounded-full p-8">
-                        <User className="h-12 w-12 text-emerald-400" />
+                        <User className="h-12 w-12 text-primary" />
                       </div>
                     </div>
                   )}
@@ -288,7 +288,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
 
               {/* Subscriber (Other person's video) */}
               <div className="order-1 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border">
-                <div className="bg-emerald-900/10 px-3 py-2 text-emerald-400 text-sm font-medium">
+                <div className="bg-emerald-900/10 px-3 py-2 text-primary text-sm font-medium">
                   Other Participant
                 </div>
                 <div
@@ -298,7 +298,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
                   {(!hasOtherParticipant || !scriptLoaded) && (
                     <div className="flex items-center justify-center h-full">
                       <div className="bg-muted/20 rounded-full p-8">
-                        <User className="h-12 w-12 text-emerald-400" />
+                        <User className="h-12 w-12 text-primary" />
                       </div>
                     </div>
                   )}
@@ -315,7 +315,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
                 className={`rounded-full p-4 h-14 w-14 ${
                   isVideoEnabled
                     ? "border-emerald-900/30"
-                    : "bg-red-900/20 border-red-900/30 text-red-400"
+                    : "bg-red-900/20 border-red-900/30 text-destructive"
                 }`}
                 disabled={!publisherReady}
                 aria-label={isVideoEnabled ? "Turn camera off" : "Turn camera on"}
@@ -330,7 +330,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token }) {
                 className={`rounded-full p-4 h-14 w-14 ${
                   isAudioEnabled
                     ? "border-emerald-900/30"
-                    : "bg-red-900/20 border-red-900/30 text-red-400"
+                    : "bg-red-900/20 border-red-900/30 text-destructive"
                 }`}
                 disabled={!publisherReady}
                 aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}

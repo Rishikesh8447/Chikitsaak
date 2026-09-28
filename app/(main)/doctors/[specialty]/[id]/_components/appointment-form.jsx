@@ -43,27 +43,29 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
       if (data.success) {
         toast.success("Appointment booked successfully!");
         onComplete();
+      } else if (data.message) {
+        toast.error(data.message);
       }
     }
   }, [data, onComplete]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+      <div className="space-y-3 rounded-md border border-primary/20 bg-primary/5 p-4">
         <div className="flex items-center">
           <Calendar className="mr-2 h-5 w-5 text-primary" />
-          <span className="text-white font-medium">
+          <span className="font-medium text-foreground">
             {format(new Date(slot.startTime), "EEEE, MMMM d, yyyy")}
           </span>
         </div>
         <div className="flex items-center">
           <Clock className="mr-2 h-5 w-5 text-primary" />
-          <span className="text-white">{formatLocalSlotRange(slot.startTime, slot.endTime)}</span>
+          <span className="text-foreground">{formatLocalSlotRange(slot.startTime, slot.endTime)}</span>
         </div>
         <div className="flex items-center">
           <CreditCard className="mr-2 h-5 w-5 text-primary" />
           <span className="text-muted-foreground">
-            Cost: <span className="text-white font-medium">2 credits</span>
+            Appointment cost: <span className="font-semibold text-foreground">2 credits</span>
           </span>
         </div>
       </div>
@@ -87,13 +89,15 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
 
       <AiPreconsultation description={description} summary={aiSummary} setSummary={setAiSummary} specialtySuggestion={aiSpecialtySuggestion} setSpecialtySuggestion={setAiSpecialtySuggestion} />
 
-      <div className="flex justify-between pt-2">
+      {data && !data.success && data.message && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{data.message}</p>}
+
+      <div className="flex flex-col-reverse justify-between gap-2 pt-2 sm:flex-row">
         <Button
           type="button"
           variant="outline"
           onClick={onBack}
           disabled={loading}
-          className="border-emerald-900/30"
+          className="w-full sm:w-auto"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Change Time Slot
@@ -101,7 +105,7 @@ export function AppointmentForm({ doctorId, slot, onBack, onComplete }) {
         <Button
           type="submit"
           disabled={loading}
-          className="min-w-36"
+          className="min-h-11 w-full sm:min-w-40 sm:w-auto"
         >
           {loading ? (
             <>

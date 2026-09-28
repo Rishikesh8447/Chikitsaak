@@ -5,6 +5,7 @@ import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { checkUser } from "@/lib/checkUser";
 import { assertInitialRoleAssignment, persistInitialRoleAssignment, ROLE_ALREADY_ASSIGNED } from "@/lib/onboarding-role-assignment.mjs";
+import { validateInitialDoctorProfile } from "@/lib/doctor-onboarding-validation.mjs";
 
 
 export async function setUserRole (formData){
@@ -31,30 +32,13 @@ assertInitialRoleAssignment({ userId, user, role });
         }
           // For doctor role - need additional information
     if (role === "DOCTOR") {
-      const specialty = formData.get("specialty");
-      const experience = parseInt(formData.get("experience"), 10);
-      const credentialUrl = formData.get("credentialUrl");
-      const description = formData.get("description");
-      const city = formData.get("city")?.toString().trim();
-      const state = formData.get("state")?.toString().trim();
-      const country = formData.get("country")?.toString().trim();
-
-  // Validate inputs
-      if (!specialty || !experience || !credentialUrl || !description || !city || !state || !country) {
-        throw new Error("All professional and location fields are required");
-      }
+      const profile = validateInitialDoctorProfile(formData);
 
         await persistInitialRoleAssignment({
           userId,
           data: {
           role: "DOCTOR",
-          specialty,
-          experience,
-          credentialUrl,
-          description,
-          city,
-          state,
-          country,
+          ...profile,
           verificationStatus: "PENDING",
         },
           updateUser: (args) => db.user.updateMany(args),

@@ -22,12 +22,12 @@ export default function DoctorProfileResubmissionForm({ profile }) {
     for (const [key, value] of Object.entries(values)) formData.set(key, String(value ?? ""));
     await fn(formData);
   }
-  return <Card><CardHeader><CardTitle>Update your doctor profile</CardTitle><CardDescription>Correct your professional details and resubmit them for administrator review.</CardDescription></CardHeader><CardContent><form className="space-y-4" onSubmit={handleSubmit(submit)}>
-    <div className="space-y-2"><Label htmlFor="specialty">Medical specialty</Label><select id="specialty" className="h-10 w-full rounded-md border border-border bg-background px-3" {...register("specialty", { required: true })}><option value="">Select specialty</option>{SPECIALTIES.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></div>
+  return <Card><CardHeader><CardTitle>Professional information</CardTitle><CardDescription>Correct your professional details and resubmit them for administrator review.</CardDescription></CardHeader><CardContent><form className="space-y-5" onSubmit={handleSubmit(submit)}>
+    <div className="space-y-2"><Label htmlFor="specialty">Medical specialty</Label><select id="specialty" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-shadow focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" {...register("specialty", { required: true })}><option value="">Select specialty</option>{SPECIALTIES.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></div>
     <div className="space-y-2"><Label htmlFor="experience">Years of experience</Label><Input id="experience" type="number" min="0" max="80" {...register("experience", { valueAsNumber: true, required: true })} /></div>
     <div className="space-y-2"><Label htmlFor="credentialUrl">Credential document URL</Label><Input id="credentialUrl" type="url" {...register("credentialUrl", { required: true })} /></div>
     <div className="space-y-2"><Label htmlFor="description">Professional description</Label><Textarea id="description" rows={4} maxLength={5000} {...register("description", { required: true })} /></div>
     <div className="grid gap-4 sm:grid-cols-3">{["city", "state", "country"].map((field) => <div className="space-y-2" key={field}><Label htmlFor={field}>{field[0].toUpperCase() + field.slice(1)}</Label><Input id={field} {...register(field, { required: true })} /></div>)}</div>
-    {data?.error && <p role="alert" className="text-sm text-destructive">{data.error}</p>}<Button type="submit" disabled={loading}>{loading ? "Submitting…" : "Resubmit for verification"}</Button>
+    {data?.error && <p role="alert" className="text-sm text-destructive">{data.error}</p>}<Button type="submit" disabled={loading}>{loading ? "Submitting..." : "Resubmit for verification"}</Button>
   </form></CardContent></Card>;
 }

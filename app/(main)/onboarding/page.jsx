@@ -100,9 +100,9 @@ export default function OnboardingPage() {
         >
           <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
             <div className="p-4 bg-emerald-900/20 rounded-full mb-4">
-              <User className="h-8 w-8 text-emerald-400" />
+              <User className="h-8 w-8 text-primary" />
             </div>
-            <CardTitle className="text-xl font-semibold text-white mb-2">
+            <CardTitle className="text-xl font-semibold text-foreground mb-2">
               Join as a Patient
             </CardTitle>
             <CardDescription className="mb-4">
@@ -111,7 +111,7 @@ export default function OnboardingPage() {
             </CardDescription>
             <Button
               type="button"
-              className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700"
+              className="w-full mt-2 bg-primary hover:bg-primary/90"
               disabled={loading}
               onClick={handlePatientSelection}
             >
@@ -132,9 +132,9 @@ export default function OnboardingPage() {
         >
           <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
             <div className="p-4 bg-emerald-900/20 rounded-full mb-4">
-              <Stethoscope className="h-8 w-8 text-emerald-400" />
+              <Stethoscope className="h-8 w-8 text-primary" />
             </div>
-            <CardTitle className="text-xl font-semibold text-white mb-2">
+            <CardTitle className="text-xl font-semibold text-foreground mb-2">
               Join as a Doctor
             </CardTitle>
             <CardDescription className="mb-4">
@@ -143,7 +143,7 @@ export default function OnboardingPage() {
             </CardDescription>
             <Button
               type="button"
-              className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700"
+              className="w-full mt-2 bg-primary hover:bg-primary/90"
               disabled={loading}
               onClick={() => setStep("doctor-form")}
             >
@@ -161,7 +161,7 @@ export default function OnboardingPage() {
       <Card className="border-emerald-900/20">
         <CardContent className="pt-6">
           <div className="mb-6">
-            <CardTitle className="text-2xl font-bold text-white mb-2">
+            <CardTitle className="text-2xl font-bold text-foreground mb-2">
               Complete Your Doctor Profile
             </CardTitle>
             <CardDescription>
@@ -186,7 +186,7 @@ export default function OnboardingPage() {
                       value={spec.name}
                       className="flex items-center gap-2"
                     >
-                      <span className="text-emerald-400">{spec.icon}</span>
+                      <span className="text-primary">{spec.icon}</span>
                       {spec.name}
                     </SelectItem>
                   ))}
@@ -277,7 +277,7 @@ export default function OnboardingPage() {
               </Button>
               <Button
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-primary hover:bg-primary/90"
                 disabled={loading}
               >
                 {loading ? (

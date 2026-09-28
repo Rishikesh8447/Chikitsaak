@@ -7,24 +7,23 @@ import { DoctorSearch } from "@/components/doctor-search";
 export default async function DoctorsPage() {
   const { doctors } = await searchDoctors();
   return (
-    <div className="w-full max-w-7xl mx-auto overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <div className="flex flex-col items-center justify-center mb-8 text-center">
-        <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">Find Your Doctor</h1>
-        <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">
-          Browse by specialty or view all available healthcare providers
-        </p>
+    <div className="mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mb-7 max-w-2xl">
+        <p className="eyebrow">Find care</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">A doctor who fits your needs.</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">Explore verified healthcare providers and find a time that works for you.</p>
       </div>
       <DoctorSearch initialDoctors={doctors} />
-      <h2 className="mt-12 mb-6 text-2xl font-bold text-slate-900 dark:text-white">Browse by specialty</h2>
+      <div className="mb-5 mt-12"><p className="eyebrow">Explore</p><h2 className="mt-1 text-xl font-semibold tracking-tight text-foreground">Browse by specialty</h2></div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
         {SPECIALTIES.map((specialty) => (
-          <Link key={specialty.name} href={`/doctors/${specialty.name}`}>
-            <Card className="hover:border-emerald-500/40 transition-all cursor-pointer border-border bg-card h-full shadow-xs">
-              <CardContent className="p-6 flex flex-col items-center justify-center text-center h-full">
-                <div className="mb-4 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 dark:bg-emerald-500/20">
-                  <div className="text-emerald-600 dark:text-emerald-400 [&_svg]:h-8 [&_svg]:w-8">{specialty.icon}</div>
+          <Link key={specialty.name} href={`/doctors/${encodeURIComponent(specialty.name)}`} className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors group-hover:border-primary/40">
+              <CardContent className="flex h-full items-center gap-4 p-4 sm:p-5">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-5">
+                  {specialty.icon}
                 </div>
-                <h3 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base">{specialty.name}</h3>
+                <div><h3 className="font-semibold text-foreground">{specialty.name}</h3><p className="mt-0.5 text-xs text-muted-foreground">Browse specialists</p></div>
               </CardContent>
             </Card>
           </Link>

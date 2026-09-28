@@ -27,13 +27,14 @@ export default async function OnboardingLayout({ children }) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-white mb-2">
+    <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:py-14">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-8 text-center">
+          <p className="eyebrow">Welcome</p>
+          <h1 className="mb-2 mt-2 text-3xl font-semibold tracking-tight text-foreground">
             Welcome to Chikitsaak
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-sm leading-6 text-muted-foreground sm:text-base">
             Tell us how you want to use the platform
           </p>
         </div>

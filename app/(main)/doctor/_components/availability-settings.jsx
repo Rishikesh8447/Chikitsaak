@@ -100,7 +100,7 @@ export function AvailabilitySettings({ slots }) {
     <Card className="border-border shadow-none">
       <CardHeader>
         <CardTitle className="text-xl font-bold text-foreground flex items-center">
-          <Clock className="h-5 w-5 mr-2 text-emerald-600 dark:text-emerald-400" />
+          <Clock className="h-5 w-5 mr-2 text-emerald-600 dark:text-primary" />
           Availability Settings
         </CardTitle>
         <CardDescription>
@@ -129,7 +129,7 @@ export function AvailabilitySettings({ slots }) {
                       className="flex items-center border-b border-border py-3 last:border-0"
                     >
                       <div className="mr-3 rounded-md bg-primary/10 p-2">
-                        <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <Clock className="h-4 w-4 text-emerald-600 dark:text-primary" />
                       </div>
                       <div>
                         <p className="text-foreground font-medium text-sm">
@@ -223,7 +223,7 @@ export function AvailabilitySettings({ slots }) {
               <Button
                 type="submit"
                 disabled={loading}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {loading ? (
                   <>
@@ -240,7 +240,7 @@ export function AvailabilitySettings({ slots }) {
 
         <div className="mt-6 p-4 bg-muted/30 border border-border/80 rounded-xl">
           <h4 className="font-medium text-foreground mb-1.5 flex items-center text-sm">
-            <AlertCircle className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <AlertCircle className="h-4 w-4 mr-2 text-emerald-600 dark:text-primary shrink-0" />
             How Availability Works
           </h4>
           <p className="text-muted-foreground text-xs leading-relaxed">

@@ -23,7 +23,7 @@ export function MedicalProfileForm({ profile }) {
     <label className="grid gap-2 text-sm font-medium">Allergies<Textarea name="allergies" value={values.allergies || ""} onChange={(e) => change("allergies", e.target.value)} maxLength={3000} /></label>
     <label className="grid gap-2 text-sm font-medium">Existing conditions<Textarea name="existingConditions" value={values.existingConditions || ""} onChange={(e) => change("existingConditions", e.target.value)} maxLength={3000} /></label>
     <label className="grid gap-2 text-sm font-medium">Current medications<Textarea name="currentMedications" value={values.currentMedications || ""} onChange={(e) => change("currentMedications", e.target.value)} maxLength={3000} /></label>
-    {data?.error && <p className="text-sm text-red-400">{data.error}</p>}
-    <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-700">{loading ? "Saving..." : "Save medical profile"}</Button>
+    {data?.error && <p className="text-sm text-destructive">{data.error}</p>}
+    <Button type="submit" disabled={loading} className="bg-primary hover:bg-primary/90">{loading ? "Saving..." : "Save medical profile"}</Button>
   </form>;
 }

@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 
 // Define credit allocations per plan
 const PLAN_CREDITS = {
-  free_user: 0, // Basic plan: 2 credits
+  free_user: 0, // The initial two-credit grant is separate from monthly plan allocation.
   standard: 10, // Standard plan: 10 credits per month
   premium: 24, // Premium plan: 24 credits per month
 };
@@ -14,6 +14,7 @@ const PLAN_CREDITS = {
 const PLAN_PRIORITY = ["premium", "standard", "free_user"];
 
 function getEntitledPlan(has) {
+  if (typeof has !== "function") return null;
   return PLAN_PRIORITY.find((plan) => has({ plan })) || null;
 }
 
@@ -29,10 +30,20 @@ export async function getMyCreditPlan() {
   if (!user) throw new Error("User not found");
   if (user.role !== "PATIENT") return { plan: null, monthlyCredits: null };
 
-  const plan = getEntitledPlan(has);
+  let plan;
+  try {
+    plan = getEntitledPlan(has);
+  } catch {
+    return {
+      plan: null,
+      monthlyCredits: null,
+      error: "We couldn't verify your Clerk subscription. Refresh this page to try again.",
+    };
+  }
   return {
     plan,
     monthlyCredits: plan ? PLAN_CREDITS[plan] : null,
+    ...(!plan ? { error: "Clerk has not confirmed a supported credit plan yet." } : {}),
   };
 }
 
@@ -43,24 +54,47 @@ export async function getMyCreditPlan() {
  */
 export async function checkAndAllocateCredits() {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) return null;
+    const { userId: clerkUserId, has } = await auth();
+    if (!clerkUserId) {
+      return { success: false, code: "UNAUTHENTICATED", message: "Sign in to sync your credits." };
+    }
     const user = await db.user.findUnique({ where: { clerkUserId } });
-    if (!user) return null;
+    if (!user) {
+      return { success: false, code: "USER_NOT_FOUND", message: "Your account could not be found. Please try again." };
+    }
 
     // Only allocate credits for patients
     if (user.role !== "PATIENT") {
-      return user;
+      return { success: true, allocated: false, balance: user.credits, plan: null };
     }
 
     // Plan entitlement comes from Clerk; the balance and grant ledger stay in Prisma.
-    const { has } = await auth();
-    const currentPlan = getEntitledPlan(has);
+    if (typeof has !== "function") {
+      return {
+        success: false,
+        code: "PLAN_LOOKUP_UNAVAILABLE",
+        message: "We couldn't verify your Clerk subscription. Refresh this page to try again.",
+      };
+    }
+    let currentPlan;
+    try {
+      currentPlan = getEntitledPlan(has);
+    } catch {
+      return {
+        success: false,
+        code: "PLAN_LOOKUP_FAILED",
+        message: "We couldn't verify your Clerk subscription. Refresh this page to try again.",
+      };
+    }
     const creditsToAllocate = currentPlan ? PLAN_CREDITS[currentPlan] : 0;
 
-    // If user doesn't have any plan, just return the user
+    // Do not silently report success when Billing has no matching configured plan.
     if (!currentPlan) {
-      return user;
+      return {
+        success: false,
+        code: "PLAN_NOT_RESOLVED",
+        message: "Clerk has not confirmed a supported credit plan yet. Refresh this page after subscription completes.",
+      };
     }
 
     const billingMonth = new Date().toISOString().slice(0, 7);
@@ -68,7 +102,7 @@ export async function checkAndAllocateCredits() {
     const previousPlanAllocationKeys = Object.keys(PLAN_CREDITS).map(
       (plan) => `${user.id}:${plan}:${billingMonth}`
     );
-    const updatedUser = await db.$transaction(async (tx) => {
+    const allocated = await db.$transaction(async (tx) => {
       // Respect allocations made earlier this month with the former plan-specific key.
       const previousAllocation = await tx.creditTransaction.findFirst({
         where: {
@@ -77,16 +111,16 @@ export async function checkAndAllocateCredits() {
           allocationKey: { in: previousPlanAllocationKeys },
         },
       });
-      if (previousAllocation) return user;
+      if (previousAllocation) return false;
 
       const allocation = await tx.creditTransaction.createMany({
         data: [{ userId: user.id, amount: creditsToAllocate, type: "CREDIT_PURCHASE", packageId: currentPlan, allocationKey }],
         skipDuplicates: true,
       });
-      if (allocation.count === 0) return user;
+      if (allocation.count === 0) return false;
 
       // Update user's credit balance
-      const updatedUser = await tx.user.update({
+      await tx.user.update({
         where: {
           id: user.id,
         },
@@ -97,20 +131,36 @@ export async function checkAndAllocateCredits() {
         },
       });
 
-      return updatedUser;
+      return true;
     });
 
-    // Revalidate relevant paths to reflect updated credit balance
+    const currentUser = await db.user.findUnique({
+      where: { id: user.id },
+      select: { credits: true },
+    });
+
+    // Revalidate views that display the current Prisma credit balance.
+    revalidatePath("/credits");
     revalidatePath("/doctors");
     revalidatePath("/appointments");
 
-    return updatedUser;
+    return {
+      success: true,
+      allocated,
+      plan: currentPlan,
+      monthlyCredits: creditsToAllocate,
+      balance: currentUser?.credits ?? user.credits,
+    };
   } catch (error) {
     console.error(
       "Failed to check subscription and allocate credits:",
-      error.message
+      error instanceof Error ? error.message : "Unknown error"
     );
-    return null;
+    return {
+      success: false,
+      code: "ALLOCATION_FAILED",
+      message: "We couldn't sync your subscription credits. Refresh this page to try again.",
+    };
   }
 }
 

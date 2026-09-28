@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "db:seed": "node prisma/seed.js",
     "postinstall": "prisma generate",
     "lint": "eslint",
     "test:e2e": "playwright test",

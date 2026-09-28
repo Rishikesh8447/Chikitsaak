@@ -31,7 +31,7 @@ export default function DoctorAppointmentsList({ appointments = [] }) {
         ) : (
           <div className="flex flex-col items-center justify-center text-center py-10 px-4">
             <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-4 rounded-full mb-3">
-              <Calendar className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              <Calendar className="h-8 w-8 text-emerald-600 dark:text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-1">
               No upcoming appointments

@@ -9,7 +9,7 @@ const videoAppointmentId = process.env.PLAYWRIGHT_VIDEO_APPOINTMENT_ID;
 
 async function assertAccessibleRoute(page, path) {
   await page.goto(path, { waitUntil: "domcontentloaded" });
-  await expect(page.locator("body > main")).toBeVisible();
+  await expect(page.locator("main").first()).toBeVisible();
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations, `${path} accessibility violations:\n${results.violations.map((violation) => `${violation.id}: ${violation.help}\n${violation.nodes.map((node) => node.html).join("\n")}`).join("\n\n")}`).toEqual([]);

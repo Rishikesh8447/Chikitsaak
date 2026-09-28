@@ -1,144 +1,68 @@
-import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  Show,
-} from "@clerk/nextjs";
-
-import {
-  Calendar,
-  User,
-  CreditCard,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Show } from "@clerk/nextjs";
+import { CalendarDays, CreditCard, FileHeart, LayoutDashboard, Search, ShieldCheck, UserRound } from "lucide-react";
 import ThemeToggle from "./theme-toggle";
 import { checkUser } from "@/lib/checkUser";
 import HeaderAuth from "./header-auth";
 import { NotificationCenter } from "./notification-center";
-import { DoctorDashboardLink } from "./doctor-dashboard-link";
-import { AdminDashboardLink } from "./admin-dashboard-link";
+
+const roleLinks = {
+  PATIENT: [
+    { href: "/doctors", label: "Find care", icon: Search },
+    { href: "/appointments", label: "Appointments", icon: CalendarDays },
+    { href: "/medical-records", label: "Medical records", icon: FileHeart },
+  ],
+  DOCTOR: [{ href: "/doctor", label: "Doctor workspace", icon: LayoutDashboard }],
+  ADMIN: [{ href: "/admin", label: "Administration", icon: ShieldCheck }],
+  UNASSIGNED: [{ href: "/onboarding", label: "Complete profile", icon: UserRound }],
+};
 
 const Header = async ({ user: initialUser } = {}) => {
-  let user = initialUser;
-
-  if (user === undefined) {
-    user = await checkUser();
-  }
+  const user = initialUser === undefined ? await checkUser() : initialUser;
+  const links = roleLinks[user?.role] || [];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background">
-      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
-
-        {/* Logo */}
-        <Link href="/" className="flex shrink-0 items-center">
-          <div className="h-10 w-10 overflow-hidden rounded-full sm:h-11 sm:w-11">
-            {/* Light Logo */}
-            <Image
-              src="/LightModelogo.png"
-              alt="Chikitsaak Logo"
-              width={56}
-              height={56}
-              className="block dark:hidden w-full h-full object-cover"
-              priority
-            />
-
-            {/* Dark Logo */}
-            <Image
-              src="/DarkModeLogo.png"
-              alt="Chikitsaak Logo"
-              width={56}
-              height={56}
-              className="hidden dark:block w-full h-full object-cover"
-              priority
-            />
-          </div>
+    <header className="sticky top-0 z-40 border-b border-border/90 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href="/" aria-label="Chikitsaak home" className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span className="relative block size-9 overflow-hidden rounded-xl bg-white ring-1 ring-border sm:size-10">
+            <Image src="/LightModelogo.png" alt="" fill sizes="40px" className="object-cover dark:hidden" priority />
+            <Image src="/DarkModeLogo.png" alt="" fill sizes="40px" className="hidden object-cover dark:block" priority />
+          </span>
+          <span className="hidden leading-tight sm:block"><span className="block text-[15px] font-bold tracking-tight text-foreground">Chikitsaak</span><span className="block text-[10px] font-medium tracking-wide text-muted-foreground">CARE, CONNECTED</span></span>
         </Link>
 
-        {/* Right Side */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-
+        <nav aria-label="Primary" className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 xl:flex">
           <Show when="signed-in">
-
-            {/* Admin */}
-            {user?.role === "ADMIN" && (
-              <AdminDashboardLink />
-            )}
-
-            {/* Doctor */}
-            {user?.role === "DOCTOR" && (
-              <DoctorDashboardLink />
-            )}
-
-            {/* Patient */}
-            {user?.role === "PATIENT" && (
-              <>
-                <Link href="/appointments">
-                  <Button variant="outline" className="hidden md:inline-flex items-center gap-2"><Calendar className="h-4 w-4" />My Appointments</Button>
-                  <Button variant="ghost" className="md:hidden w-10 h-10 p-0"><Calendar className="h-4 w-4" /></Button>
-                </Link>
-                <Link href="/medical-records">
-                  <Button variant="outline" className="hidden md:inline-flex items-center gap-2"><User className="h-4 w-4" />Medical Records</Button>
-                  <Button variant="ghost" aria-label="Open medical records" className="h-10 w-10 p-0 md:hidden"><User className="h-4 w-4" /></Button>
-                </Link>
-              </>
-            )}
-
-            {/* Unassigned */}
-            {user?.role === "UNASSIGNED" && (
-              <Link href="/onboarding">
-                <Button
-                  variant="outline"
-                  className="hidden md:inline-flex items-center gap-2"
-                >
-                  <User className="h-4 w-4" />
-                  Complete Profile
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  className="h-10 w-10 p-0 md:hidden"
-                >
-                  <User className="h-4 w-4" />
-                </Button>
-              </Link>
-            )}
+            {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="size-4" />{label}</Link>)}
+            {user?.role === "PATIENT" && <Link href="/credits" className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><CreditCard className="size-4" />Credits</Link>}
           </Show>
+          <Show when="signed-out">
+            <Link href="/doctors" className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Search className="size-4" />Find care</Link>
+            <Link href="/#pricing" className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Plans</Link>
+          </Show>
+        </nav>
 
-          {user && <NotificationCenter />}
-
-          {/* Pricing is secondary navigation; signed-in users retain their credit status. */}
-          {!user && (
-            <Button asChild variant="ghost" className="h-9 px-3 text-primary hover:text-primary">
-              <Link href="#pricing">Pricing</Link>
-            </Button>
-          )}
-
-          {user?.role !== "ADMIN" && user && (
-            <Link href="/credits">
-              <Badge
-                variant="outline"
-                className="h-9 bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-500/20 dark:border-emerald-500/30 px-3 py-1 flex items-center gap-2 font-medium"
-              >
-                <CreditCard className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-
-                <span className="text-emerald-700 dark:text-emerald-400">
-                  {user.credits}{" "}
-                  <span className="hidden md:inline">
-                    {user.role === "PATIENT" ? "Credits" : "Earned Credits"}
-                  </span>
-                </span>
-              </Badge>
-            </Link>
-          )}
-
-          {/* Theme Toggle */}
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <Show when="signed-in">
+            {user?.role !== "ADMIN" && user && <Link href="/credits" aria-label={`Open credit balance: ${user.credits} credits`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 sm:px-3"><CreditCard className="size-3.5" /><span>{user.credits}</span><span className="hidden sm:inline">credits</span></Link>}
+            {user && <NotificationCenter />}
+          </Show>
           <ThemeToggle />
-
           <HeaderAuth />
-
         </div>
+      </div>
+
+      <nav aria-label="Mobile" className="flex gap-1 overflow-x-auto border-t border-border/70 px-3 py-1.5 xl:hidden">
+        <Show when="signed-in">
+          {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="size-3.5" />{label}</Link>)}
+          {user?.role === "PATIENT" && <Link href="/credits" className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"><CreditCard className="size-3.5" />Credits</Link>}
+        </Show>
+        <Show when="signed-out">
+          <Link href="/doctors" className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"><Search className="size-3.5" />Find care</Link>
+          <Link href="/#pricing" className="inline-flex min-h-9 shrink-0 items-center rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">Plans</Link>
+        </Show>
       </nav>
     </header>
   );

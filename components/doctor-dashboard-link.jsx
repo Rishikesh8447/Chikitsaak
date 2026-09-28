@@ -12,18 +12,18 @@ export function DoctorDashboardLink() {
     return (
       <span className="hidden items-center gap-2 text-sm font-medium text-muted-foreground md:inline-flex">
         <Stethoscope className="h-4 w-4" />
-        Doctor Dashboard
+        Doctor workspace
       </span>
     );
   }
 
   return (
-    <Link href="/doctor" aria-label="Go to Doctor Dashboard">
+    <Link href="/doctor" aria-label="Open doctor workspace">
       <Button variant="outline" className="hidden items-center gap-2 md:inline-flex">
         <Stethoscope className="h-4 w-4" />
-        Doctor Dashboard
+        Doctor workspace
       </Button>
-      <Button variant="ghost" aria-label="Go to Doctor Dashboard" className="h-10 w-10 p-0 md:hidden">
+      <Button variant="ghost" aria-label="Open doctor workspace" className="h-10 w-10 p-0 md:hidden">
         <Stethoscope className="h-4 w-4" />
       </Button>
     </Link>

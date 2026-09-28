@@ -5,8 +5,8 @@ import { AlertCircle, Users, CreditCard, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata = {
-  title: "Admin Settings - Chikitsaak",
-  description: "Manage doctors, patients, and platform settings",
+  title: "Administration | Chikitsaak",
+  description: "Review doctor applications and manage platform operations.",
 };
 
 export default async function AdminLayout({ children }) {
@@ -22,41 +22,41 @@ export default async function AdminLayout({ children }) {
     <main className="mx-auto w-full max-w-7xl min-w-0 px-4 py-8 sm:px-6">
       <Tabs
         defaultValue="pending"
-        className="!grid grid-cols-1 items-start gap-4 lg:grid-cols-[200px_minmax(0,1fr)]"
+        className="!grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:gap-6"
       >
-        <TabsList className="flex min-w-0 max-w-full flex-row gap-2 self-start overflow-x-auto border-r border-border bg-transparent p-0 pr-3 pt-1 lg:sticky lg:top-24 lg:flex-col lg:overflow-x-visible">
+        <TabsList aria-label="Administration" className="grid h-auto w-full min-w-0 max-w-full grid-cols-2 gap-1 self-start rounded-lg border border-border bg-card p-1 shadow-xs lg:sticky lg:top-32 xl:top-24 lg:flex lg:flex-col lg:items-stretch lg:h-auto">
           <TabsTrigger
             value="pending"
-            className="flex min-w-[150px] flex-1 items-center justify-center whitespace-normal rounded-lg px-3.5 py-3 text-center text-sm font-medium transition-all text-slate-600 hover:bg-muted/60 hover:text-slate-900 data-active:bg-emerald-500/10 data-active:font-semibold data-active:text-emerald-600 dark:text-slate-300 dark:hover:text-white dark:data-active:bg-emerald-500/20 dark:data-active:text-emerald-400 lg:w-full lg:flex-none lg:min-w-0 lg:justify-start lg:text-left"
+            className="flex min-h-10 min-w-0 items-center justify-start gap-2 whitespace-nowrap rounded-md border border-transparent px-2 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-active:border-primary/20 data-active:bg-primary/10 data-active:font-semibold data-active:text-primary sm:px-3 sm:text-sm lg:w-full lg:h-auto lg:flex-none"
           >
-            <AlertCircle className="h-4 w-4 mr-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <AlertCircle className="size-4 shrink-0" />
             <span>Pending Verification</span>
           </TabsTrigger>
           <TabsTrigger
             value="doctors"
-            className="flex min-w-[140px] flex-1 items-center justify-center whitespace-normal rounded-lg px-3.5 py-3 text-center text-sm font-medium transition-all text-slate-600 hover:bg-muted/60 hover:text-slate-900 data-active:bg-emerald-500/10 data-active:font-semibold data-active:text-emerald-600 dark:text-slate-300 dark:hover:text-white dark:data-active:bg-emerald-500/20 dark:data-active:text-emerald-400 lg:w-full lg:flex-none lg:min-w-0 lg:justify-start lg:text-left"
+            className="flex min-h-10 min-w-0 items-center justify-start gap-2 whitespace-nowrap rounded-md border border-transparent px-2 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-active:border-primary/20 data-active:bg-primary/10 data-active:font-semibold data-active:text-primary sm:px-3 sm:text-sm lg:w-full lg:h-auto lg:flex-none"
           >
-            <Users className="h-4 w-4 mr-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <Users className="size-4 shrink-0" />
             <span>Doctors</span>
           </TabsTrigger>
           <TabsTrigger
             value="payouts"
-            className="flex min-w-[120px] flex-1 items-center justify-center whitespace-normal rounded-lg px-3.5 py-3 text-center text-sm font-medium transition-all text-slate-600 hover:bg-muted/60 hover:text-slate-900 data-active:bg-emerald-500/10 data-active:font-semibold data-active:text-emerald-600 dark:text-slate-300 dark:hover:text-white dark:data-active:bg-emerald-500/20 dark:data-active:text-emerald-400 lg:w-full lg:flex-none lg:min-w-0 lg:justify-start lg:text-left"
+            className="flex min-h-10 min-w-0 items-center justify-start gap-2 whitespace-nowrap rounded-md border border-transparent px-2 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-active:border-primary/20 data-active:bg-primary/10 data-active:font-semibold data-active:text-primary sm:px-3 sm:text-sm lg:w-full lg:h-auto lg:flex-none"
           >
-            <CreditCard className="h-4 w-4 mr-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <CreditCard className="size-4 shrink-0" />
             <span>Payouts</span>
           </TabsTrigger>
           <TabsTrigger
             value="analytics"
-            className="flex min-w-[120px] flex-1 items-center justify-center whitespace-normal rounded-lg px-3.5 py-3 text-center text-sm font-medium transition-all text-slate-600 hover:bg-muted/60 hover:text-slate-900 data-active:bg-emerald-500/10 data-active:font-semibold data-active:text-emerald-600 dark:text-slate-300 dark:hover:text-white dark:data-active:bg-emerald-500/20 dark:data-active:text-emerald-400 lg:w-full lg:flex-none lg:min-w-0 lg:justify-start lg:text-left"
+            className="flex min-h-10 min-w-0 items-center justify-start gap-2 whitespace-nowrap rounded-md border border-transparent px-2 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-active:border-primary/20 data-active:bg-primary/10 data-active:font-semibold data-active:text-primary sm:px-3 sm:text-sm lg:w-full lg:h-auto lg:flex-none"
           >
-            <BarChart3 className="h-4 w-4 mr-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <BarChart3 className="size-4 shrink-0" />
             <span>Analytics</span>
           </TabsTrigger>
         </TabsList>
 
         <div className="min-w-0 w-full space-y-6">
-          <PageHeader title="Admin dashboard" />
+          <PageHeader title="Administration" description="Review doctor applications, manage payouts, and monitor platform activity." backLink={null} />
           {children}
         </div>
       </Tabs>

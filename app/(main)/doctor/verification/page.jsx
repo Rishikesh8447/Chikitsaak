@@ -24,22 +24,20 @@ export default async function VerificationPage() {
   const isRejected = user?.verificationStatus === "REJECTED";
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="max-w-2xl mx-auto">
-        <Card className="border-emerald-900/20">
+    <div className="mx-auto w-full max-w-3xl">
+      <div>
+        <Card className="border-border shadow-xs">
           <CardHeader className="text-center">
             <div
-              className={`mx-auto p-4 ${
-                isRejected ? "bg-red-900/20" : "bg-amber-900/20"
-              } rounded-full mb-4 w-fit`}
+              className={`mx-auto mb-4 flex size-12 items-center justify-center rounded-xl ${isRejected ? "bg-destructive/10" : "bg-amber-500/10"}`}
             >
               {isRejected ? (
-                <XCircle className="h-8 w-8 text-red-400" />
+                <XCircle className="size-6 text-destructive" />
               ) : (
-                <ClipboardCheck className="h-8 w-8 text-amber-400" />
+                <ClipboardCheck className="size-6 text-amber-700 dark:text-amber-400" />
               )}
             </div>
-            <CardTitle className="text-2xl font-bold text-white">
+            <CardTitle className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               {isRejected
                 ? "Verification Declined"
                 : "Verification in Progress"}
@@ -52,8 +50,8 @@ export default async function VerificationPage() {
           </CardHeader>
           <CardContent className="text-center">
             {isRejected ? (
-              <div className="bg-red-900/10 border border-red-900/20 rounded-lg p-4 mb-6 flex items-start">
-                <AlertCircle className="h-5 w-5 text-red-400 mr-3 mt-0.5 flex-shrink-0" />
+              <div className="mb-6 flex items-start rounded-md border border-destructive/20 bg-destructive/5 p-4">
+                <AlertCircle className="mr-3 mt-0.5 size-5 shrink-0 text-destructive" />
                 <div className="text-muted-foreground text-left">
                   <p className="mb-2">
                     Our administrative team has reviewed your application and
@@ -72,8 +70,8 @@ export default async function VerificationPage() {
                 </div>
               </div>
             ) : (
-              <div className="bg-amber-900/10 border border-amber-900/20 rounded-lg p-4 mb-6 flex items-start">
-                <AlertCircle className="h-5 w-5 text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
+              <div className="mb-6 flex items-start rounded-md border border-amber-500/20 bg-amber-500/5 p-4">
+                <AlertCircle className="mr-3 mt-0.5 size-5 shrink-0 text-amber-700 dark:text-amber-400" />
                 <p className="text-muted-foreground text-left">
                   Your profile is currently under review by our administrative
                   team. This process typically takes 1-2 business days.
@@ -95,13 +93,13 @@ export default async function VerificationPage() {
                   <Button
                     asChild
                     variant="outline"
-                    className="border-emerald-900/30"
+                    className=""
                   >
                     <Link href="/">Return to Home</Link>
                   </Button>
                   <Button
                     asChild
-                    className="bg-emerald-600 hover:bg-emerald-700"
+                    className=""
                   >
                     <Link href="/doctor/update-profile">Update Profile</Link>
                   </Button>
@@ -111,13 +109,13 @@ export default async function VerificationPage() {
                   <Button
                     asChild
                     variant="outline"
-                    className="border-emerald-900/30"
+                    className=""
                   >
                     <Link href="/">Return to Home</Link>
                   </Button>
                   <Button
                     asChild
-                    className="bg-emerald-600 hover:bg-emerald-700"
+                    className=""
                   >
                     <Link href="/contact-support">Contact Support</Link>
                   </Button>

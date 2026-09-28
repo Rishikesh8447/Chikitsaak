@@ -29,6 +29,7 @@ export function SlotPicker({ days, onSelectSlot }) {
 
   return (
     <section aria-label="Choose appointment time" className="space-y-6">
+      <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground"><span className="font-medium">Consultation cost: 2 credits</span><span className="ml-2 text-muted-foreground">Choose a day and a 30-minute time.</span></div>
       <Tabs
         defaultValue={activeTab}
         onValueChange={setActiveTab}
@@ -65,7 +66,7 @@ export function SlotPicker({ days, onSelectSlot }) {
               </div>
             ) : (
               <div className="space-y-3">
-                <h3 className="text-lg font-medium text-white mb-2">
+                <h3 className="mb-2 text-base font-semibold text-foreground">
                   {day.displayDate}
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
@@ -85,14 +86,14 @@ export function SlotPicker({ days, onSelectSlot }) {
                         <Clock
                           className={`h-4 w-4 mr-2 ${
                             selectedSlot?.startTime === slot.startTime
-                              ? "text-emerald-400"
+                              ? "text-primary-foreground"
                               : "text-muted-foreground"
                           }`}
                         />
                         <span
                           className={
                             selectedSlot?.startTime === slot.startTime
-                              ? "text-white"
+                            ? "text-primary-foreground"
                               : "text-muted-foreground"
                           }
                         >

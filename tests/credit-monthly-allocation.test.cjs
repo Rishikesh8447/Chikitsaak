@@ -6,13 +6,16 @@ const { cwd } = require("node:process");
 
 const sourcePromise = readFile(join(cwd(), "actions", "credits.js"), "utf8");
 
-async function createAllocator({ plan = "standard", historical = [] } = {}) {
+async function createAllocator({ plan = "standard", historical = [], planError = false } = {}) {
   const source = await sourcePromise;
   const state = {
     user: { id: "user-1", clerkUserId: "clerk-user", role: "PATIENT", credits: 2 },
     transactions: structuredClone(historical),
   };
-  const auth = async () => ({ userId: "clerk-user", has: ({ plan: requested }) => plan === requested });
+  const auth = async () => ({ userId: "clerk-user", has: ({ plan: requested }) => {
+    if (planError) throw new Error("Clerk unavailable");
+    return plan === requested;
+  } });
   const db = {
     user: { findUnique: async () => structuredClone(state.user) },
     $transaction: async (work) => work({
@@ -70,13 +73,26 @@ for (const [plan, monthlyCredits] of [["free_user", 0], ["standard", 10], ["prem
   });
 }
 
-test("first monthly allocation grants the selected plan amount once", async () => {
+test("first monthly allocation grants the selected plan amount once and reports the Prisma balance", async () => {
   const { checkAndAllocateCredits, state } = await createAllocator({ plan: "standard" });
-  await checkAndAllocateCredits();
+  const result = await checkAndAllocateCredits();
+  assert.deepEqual(result, { success: true, allocated: true, plan: "standard", monthlyCredits: 10, balance: 12 });
   assert.equal(state.user.credits, 12);
   assert.deepEqual(state.transactions.map(({ amount, packageId, allocationKey }) => ({ amount, packageId, allocationKey })), [
     { amount: 10, packageId: "standard", allocationKey: `user-1:monthly:${monthKey()}` },
   ]);
+});
+
+test("premium plan adds 24 credits to the existing Prisma balance", async () => {
+  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "premium" });
+  const result = await checkAndAllocateCredits();
+  assert.equal(result.success, true);
+  assert.equal(result.allocated, true);
+  assert.equal(result.monthlyCredits, 24);
+  assert.equal(result.balance, 26);
+  assert.equal(state.user.credits, 26);
+  assert.equal(state.transactions.length, 1);
+  assert.equal(state.transactions[0].amount, 24);
 });
 
 test("calling the allocator twice for the same plan grants only once", async () => {
@@ -119,5 +135,23 @@ test("a historical plan-specific allocation this month remains untouched and pre
   const before = structuredClone(state);
   await checkAndAllocateCredits();
   assert.deepEqual(state, before);
+});
+
+test("an unsupported or unresolved Clerk plan returns a clear result without changing credits", async () => {
+  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "unconfigured-plan" });
+  const result = await checkAndAllocateCredits();
+  assert.equal(result.success, false);
+  assert.equal(result.code, "PLAN_NOT_RESOLVED");
+  assert.match(result.message, /Clerk has not confirmed a supported credit plan/);
+  assert.equal(state.user.credits, 2);
+  assert.equal(state.transactions.length, 0);
+});
+
+test("a Clerk entitlement lookup error returns a clear result", async () => {
+  const { checkAndAllocateCredits } = await createAllocator({ planError: true });
+  const result = await checkAndAllocateCredits();
+  assert.equal(result.success, false);
+  assert.equal(result.code, "PLAN_LOOKUP_FAILED");
+  assert.match(result.message, /couldn't verify your Clerk subscription/);
 });
 

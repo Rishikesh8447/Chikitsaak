@@ -297,11 +297,11 @@ export function AppointmentCard({
                   </p>
                 )}
                 <div className="flex items-center mt-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <Calendar className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-primary shrink-0" />
                   <span>{formatDateTime(appointment.startTime)}</span>
                 </div>
                 <div className="flex items-center mt-1 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <Clock className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-primary shrink-0" />
                   <span>
                     {formatTime(appointment.startTime)} -{" "}
                     {formatTime(appointment.endTime)}
@@ -316,7 +316,7 @@ export function AppointmentCard({
                   appointment.status === "COMPLETED"
                     ? "bg-green-700/10 border-green-700/20 text-green-700 dark:text-green-400"
                     : appointment.status === "CANCELLED"
-                    ? "bg-red-700/10 border-red-700/20 text-red-700 dark:text-red-400"
+                    ? "bg-red-700/10 border-red-700/20 text-red-700 dark:text-destructive"
                     : appointment.status === "CONFIRMED" || appointment.status === "IN_PROGRESS"
                     ? "bg-primary/10 border-primary/20 text-primary"
                     : "bg-muted border-border text-muted-foreground"
@@ -383,7 +383,7 @@ export function AppointmentCard({
                 {otherPartyLabel}
               </h4>
               <div className="flex items-center">
-                <div className="h-5 w-5 text-emerald-600 dark:text-emerald-400 mr-2 shrink-0">
+                <div className="h-5 w-5 text-emerald-600 dark:text-primary mr-2 shrink-0">
                   {otherPartyIcon}
                 </div>
                 <div>
@@ -413,13 +413,13 @@ export function AppointmentCard({
               </h4>
               <div className="flex flex-col gap-1 text-sm">
                 <div className="flex items-center">
-                  <Calendar className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mr-2 shrink-0" />
+                  <Calendar className="h-4 w-4 text-emerald-600 dark:text-primary mr-2 shrink-0" />
                   <p className="text-foreground font-medium">
                     {formatDateTime(appointment.startTime)}
                   </p>
                 </div>
                 <div className="flex items-center">
-                  <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mr-2 shrink-0" />
+                  <Clock className="h-4 w-4 text-emerald-600 dark:text-primary mr-2 shrink-0" />
                   <p className="text-foreground font-medium">
                     {formatTime(appointment.startTime)} -{" "}
                     {formatTime(appointment.endTime)}
@@ -437,9 +437,9 @@ export function AppointmentCard({
                 variant="outline"
                 className={
                   appointment.status === "COMPLETED"
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium"
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-primary font-medium"
                     : appointment.status === "CANCELLED"
-                    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 font-medium"
+                    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-destructive font-medium"
                     : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium"
                 }
               >
@@ -477,7 +477,7 @@ export function AppointmentCard({
               <Button variant="outline" onClick={() => handleStatusChange("NO_SHOW")} disabled={statusLoading} className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">Mark No-show</Button>
             )}
             {userRole === "PATIENT" && ["SCHEDULED", "CONFIRMED"].includes(appointment.status) && (
-              <Button variant="outline" onClick={openReschedule} disabled={slotsLoading} className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">Reschedule</Button>
+              <Button variant="outline" onClick={openReschedule} disabled={slotsLoading} className="border-emerald-500/30 text-emerald-600 dark:text-primary hover:bg-emerald-500/10">Reschedule</Button>
             )}
             {appointment.status === "SCHEDULED" && (
               <p className="text-sm text-muted-foreground">Waiting for doctor confirmation.</p>
@@ -488,7 +488,7 @@ export function AppointmentCard({
                   Video Consultation
                 </h4>
                 <Button
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium shadow-xs"
                   disabled={
                     !isAppointmentActive() || action === "video" || tokenLoading
                   }
@@ -524,7 +524,7 @@ export function AppointmentCard({
                       variant="ghost"
                       size="sm"
                       onClick={() => setAction("notes")}
-                      className="h-7 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10"
+                      className="h-7 text-emerald-600 dark:text-primary hover:text-emerald-700 hover:bg-emerald-500/10"
                     >
                       <Edit className="h-3.5 w-3.5 mr-1" />
                       {appointment.notes ? "Edit" : "Add"}
@@ -558,7 +558,7 @@ export function AppointmentCard({
                       size="sm"
                       onClick={handleSaveNotes}
                       disabled={notesLoading}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       {notesLoading ? (
                         <>
@@ -608,7 +608,7 @@ export function AppointmentCard({
                 <Button
                   onClick={handleMarkCompleted}
                   disabled={completeLoading}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {completeLoading ? (
                     <>
@@ -630,7 +630,7 @@ export function AppointmentCard({
                   variant="outline"
                   onClick={handleCancelAppointment}
                   disabled={cancelLoading}
-                  className="border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 mt-3 sm:mt-0"
+                  className="border-red-500/30 text-red-600 dark:text-destructive hover:bg-red-500/10 mt-3 sm:mt-0"
                 >
                   {cancelLoading ? (
                     <>
@@ -649,7 +649,7 @@ export function AppointmentCard({
 
             <Button
               onClick={() => setOpen(false)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               Close
             </Button>
@@ -663,7 +663,7 @@ export function AppointmentCard({
             {slotsLoading ? <p className="text-xs text-muted-foreground">Loading available slots...</p> : slotsData?.days?.map((day) => <div key={day.date}><h4 className="mb-2 text-xs font-semibold text-foreground">{day.displayDate}</h4><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{day.slots.map((slot) => <Button key={slot.startTime} variant={selectedRescheduleSlot?.startTime === slot.startTime ? "default" : "outline"} onClick={() => setSelectedRescheduleSlot(slot)}>{formatLocalSlotRange(slot.startTime, slot.endTime)}</Button>)}</div></div>)}
             {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && <p className="text-xs text-muted-foreground">No available appointments for these dates.</p>}
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button><Button onClick={confirmReschedule} disabled={!selectedRescheduleSlot || rescheduleLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white">{rescheduleLoading ? "Rescheduling..." : "Confirm Reschedule"}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button><Button onClick={confirmReschedule} disabled={!selectedRescheduleSlot || rescheduleLoading} className="bg-primary text-primary-foreground hover:bg-primary/90">{rescheduleLoading ? "Rescheduling..." : "Confirm Reschedule"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

@@ -1,9 +1,6 @@
-import { Stethoscope } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-
 export const metadata = {
-  title: "Doctor Dashboard -Chikitsaak",
-  description: "Manage your appointments and availability",
+  title: "Doctor workspace | Chikitsaak",
+  description: "Manage consultations, availability, and practice earnings.",
 };
 
 export default async function DoctorDashboardLayout({ children }) {

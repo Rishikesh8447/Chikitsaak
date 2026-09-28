@@ -16,28 +16,19 @@ export function PageHeader({
   title,
   backLink = "/",
   backLabel = "Back to Home",
+  description,
+  action,
 }) {
   return (
-    <div className="mb-6 flex flex-col justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-3">
-        {icon && (
-          <div className="text-emerald-600 dark:text-emerald-400 shrink-0">
-            {React.cloneElement(icon, {
-              className: "h-7 w-7 sm:h-9 sm:w-9",
-            })}
-          </div>
-        )}
-        <h1 className="min-w-0 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{title}</h1>
+    <div className="mb-7 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {icon && <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">{React.cloneElement(icon, { className: "size-4" })}</span>}
+          <h1 className="min-w-0 text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">{title}</h1>
+        </div>
+        {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>}
       </div>
-      <Link href={backLink} className="w-fit">
-        <Button
-          variant="outline"
-          className="border-border/80 text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          {backLabel}
-        </Button>
-      </Link>
+      {action || (backLink && <Button asChild variant="outline" size="sm" className="w-fit"><Link href={backLink}><ArrowLeft className="size-4" />{backLabel}</Link></Button>)}
     </div>
   );
 }

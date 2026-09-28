@@ -30,16 +30,16 @@ export function VerifiedDoctors({ doctors }) {
   const filteredDoctors = doctors.filter((doctor) => {
     const query = searchTerm.toLowerCase();
     return (
-      doctor.name.toLowerCase().includes(query) ||
-      doctor.specialty.toLowerCase().includes(query) ||
-      doctor.email.toLowerCase().includes(query)
+      (doctor.name ?? "").toLowerCase().includes(query) ||
+      (doctor.specialty ?? "").toLowerCase().includes(query) ||
+      (doctor.email ?? "").toLowerCase().includes(query)
     );
   });
 
   const handleStatusChange = async (doctor, suspend) => {
     const confirmed = window.confirm(
       `Are you sure you want to ${suspend ? "suspend" : "reinstate"} ${
-        doctor.name
+        doctor.name || "Name unavailable"
       }?`
     );
     if (!confirmed || loading) return;
@@ -57,7 +57,7 @@ export function VerifiedDoctors({ doctors }) {
   useEffect(() => {
     if (data?.success && targetDoctor && actionType) {
       const actionVerb = actionType === "SUSPEND" ? "Suspended" : "Reinstated";
-      toast.success(`${actionVerb} ${targetDoctor.name} successfully!`);
+      toast.success(`${actionVerb} ${targetDoctor.name || "Name unavailable"} successfully!`);
       setTargetDoctor(null);
       setActionType(null);
     }
@@ -69,7 +69,7 @@ export function VerifiedDoctors({ doctors }) {
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-xl font-bold text-white">
+              <CardTitle className="text-xl font-bold text-foreground">
                 Manage Doctors
               </CardTitle>
               <CardDescription>
@@ -99,6 +99,7 @@ export function VerifiedDoctors({ doctors }) {
             <div className="space-y-4">
               {filteredDoctors.map((doctor) => {
                 const isSuspended = doctor.verificationStatus === "REJECTED";
+                const doctorName = doctor.name || "Name unavailable";
                 return (
                   <Card
                     key={doctor.id}
@@ -108,14 +109,14 @@ export function VerifiedDoctors({ doctors }) {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                           <div className="bg-muted/20 rounded-full p-2">
-                            <User className="h-5 w-5 text-emerald-400" />
+                            <User className="h-5 w-5 text-primary" />
                           </div>
                           <div>
-                            <h3 className="font-medium text-white">
-                              {doctor.name}
+                            <h3 className="font-medium text-foreground">
+                              {doctorName}
                             </h3>
                             <p className="text-sm text-muted-foreground">
-                              {doctor.specialty} • {doctor.experience} years
+                              {doctor.specialty} · {doctor.experience} years
                               experience
                             </p>
                             <p className="text-sm text-muted-foreground mt-1">
@@ -128,7 +129,7 @@ export function VerifiedDoctors({ doctors }) {
                             <>
                               <Badge
                                 variant="outline"
-                                className="bg-red-900/20 border-red-900/30 text-red-400"
+                                className="border-destructive/30 bg-destructive/10 text-destructive"
                               >
                                 Suspended
                               </Badge>
@@ -153,7 +154,7 @@ export function VerifiedDoctors({ doctors }) {
                             <>
                               <Badge
                                 variant="outline"
-                                className="bg-emerald-900/20 border-emerald-900/30 text-emerald-400"
+                                className="border-primary/25 bg-primary/10 text-primary"
                               >
                                 Active
                               </Badge>
@@ -162,7 +163,7 @@ export function VerifiedDoctors({ doctors }) {
                                 size="sm"
                                 onClick={() => handleStatusChange(doctor, true)}
                                 disabled={loading}
-                                className="border-red-900/30 hover:bg-red-900/10 text-red-400"
+                                className="border-destructive/30 text-destructive hover:bg-destructive/10"
                               >
                                 {loading && targetDoctor?.id === doctor.id ? (
                                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />

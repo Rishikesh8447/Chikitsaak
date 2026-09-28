@@ -7,9 +7,9 @@ const labels = { total: "Total appointments", upcoming: "Upcoming", completed: "
 
 function MetricCards({ metrics }) {
   return (
-    <div className="grid min-w-0 w-full grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+    <div className="grid min-w-0 w-full grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {Object.entries(metrics || {}).map(([key, value]) => (
-        <div key={key} className="min-w-0 rounded-xl border border-border/80 bg-card p-4 shadow-xs last:sm:col-span-2 2xl:last:col-span-1">
+        <div key={key} className="min-w-0 rounded-xl border border-border/80 bg-card p-4 shadow-xs">
           <p className="text-xs font-medium text-muted-foreground">{labels[key] || key}</p>
           <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{value}</p>
         </div>
@@ -63,7 +63,7 @@ export function AnalyticsPanel({ title, analytics, basePath }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
-            <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-primary shrink-0" />
             {title}
           </h2>
           <p className="text-xs text-muted-foreground">Database-backed summary for the selected period.</p>
@@ -75,7 +75,7 @@ export function AnalyticsPanel({ title, analytics, basePath }) {
                 variant={analytics.range === range ? "default" : "outline"}
                 className={`cursor-pointer transition-all ${
                   analytics.range === range
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "hover:bg-muted text-muted-foreground"
                 }`}
               >
@@ -118,7 +118,7 @@ export function AnalyticsPanel({ title, analytics, basePath }) {
         <Card className="border-border/80 dark:border-border shadow-xs">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
-              <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-primary" />
               User growth
             </CardTitle>
           </CardHeader>

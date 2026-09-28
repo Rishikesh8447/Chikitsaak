@@ -7,11 +7,11 @@ const { cwd } = require("node:process");
 const adminSource = readFile(join(cwd(), "actions", "admin.js"), "utf8");
 const analyticsSource = readFile(join(cwd(), "actions", "analytics.js"), "utf8");
 
-async function loadAdminDataActions() {
+async function loadAdminDataActions({ doctorName = "Dr Example", experience = 5, clerkUser = { firstName: "Dr", lastName: "Example" } } = {}) {
   const queries = [];
   const fullDoctor = {
-    id: "doctor-1", clerkUserId: "clerk-doctor", name: "Dr Example", email: "doctor@example.com",
-    createdAt: new Date("2026-01-01T00:00:00Z"), specialty: "Cardiology", experience: 5,
+    id: "doctor-1", clerkUserId: "clerk-doctor", name: doctorName, email: "doctor@example.com",
+    createdAt: new Date("2026-01-01T00:00:00Z"), specialty: "Cardiology", experience,
     credentialUrl: "https://example.test/credential", description: "Professional profile",
     verificationStatus: "PENDING", bloodGroup: "O+", allergies: "private", currentMedications: "private",
   };
@@ -43,7 +43,7 @@ async function loadAdminDataActions() {
   const dependencies = {
     db,
     auth: async () => ({ userId: "clerk-admin" }),
-    clerkClient: async () => ({ users: { getUser: async () => ({ firstName: "Dr", lastName: "Example" }) } }),
+    clerkClient: async () => ({ users: { getUser: async () => clerkUser } }),
     revalidatePath: () => {},
   };
   const transformed = (await adminSource)
@@ -70,6 +70,33 @@ test("admin doctor responses omit medical records and unnecessary Clerk identifi
   assert.equal(actions.queries[0].select.credentialUrl, true);
   assert.equal(actions.queries[1].select.verificationStatus, true);
   assert.equal(actions.queries.some((query) => query.select.bloodGroup), false);
+});
+
+test("pending doctor display name ignores null sentinels and preserves available profile data", async () => {
+  const clerkName = await loadAdminDataActions({
+    doctorName: "null null",
+    experience: null,
+    clerkUser: { firstName: "John", lastName: "Doe" },
+  });
+  const hydrated = (await clerkName.getPendingDoctors()).doctors[0];
+  assert.equal(hydrated.name, "John Doe");
+  assert.equal(hydrated.experience, null);
+
+  const databaseFallback = await loadAdminDataActions({
+    doctorName: "Dr Stored Name",
+    clerkUser: { firstName: "null", lastName: "undefined" },
+  });
+  const fallback = (await databaseFallback.getPendingDoctors()).doctors[0];
+  assert.equal(fallback.name, "Dr Stored Name");
+
+  const unavailable = await loadAdminDataActions({
+    doctorName: "null null",
+    experience: null,
+    clerkUser: { firstName: "null", lastName: "undefined" },
+  });
+  const missing = (await unavailable.getPendingDoctors()).doctors[0];
+  assert.equal(missing.name, null);
+  assert.equal(missing.experience, null);
 });
 
 test("pending payout response contains required payment details without medical fields", async () => {

@@ -43,7 +43,7 @@ export function AiPreconsultation({ description, summary, setSummary, specialtyS
     <div className="space-y-3 rounded-md border border-emerald-900/20 bg-muted/10 p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-medium text-white">AI Assistance</p>
+          <p className="font-medium text-foreground">AI Assistance</p>
           <p className="text-xs text-muted-foreground">Prepare a discussion summary from your own description.</p>
         </div>
         <Button type="button" variant="outline" onClick={generate} disabled={loading || !description.trim()}>
@@ -51,13 +51,13 @@ export function AiPreconsultation({ description, summary, setSummary, specialtyS
           {summary ? "Regenerate" : "Generate"}
         </Button>
       </div>
-      {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
       {summary && (
         <div className="space-y-2">
-          <label htmlFor="ai-summary" className="text-sm font-medium text-white">AI-generated summary (edit before booking)</label>
+          <label htmlFor="ai-summary" className="text-sm font-medium text-foreground">AI-generated summary (edit before booking)</label>
           <Textarea id="ai-summary" value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={5000} rows={8} />
-          <label htmlFor="ai-specialty" className="text-sm font-medium text-white">Possible specialty to consider (optional)</label>
-          <input id="ai-specialty" value={specialtySuggestion} onChange={(event) => setSpecialtySuggestion(event.target.value)} maxLength={120} className="h-10 w-full rounded-md border border-emerald-900/20 bg-background px-3 text-sm text-white" />
+          <label htmlFor="ai-specialty" className="text-sm font-medium text-foreground">Possible specialty to consider (optional)</label>
+          <input id="ai-specialty" value={specialtySuggestion} onChange={(event) => setSpecialtySuggestion(event.target.value)} maxLength={120} className="h-10 w-full rounded-md border border-emerald-900/20 bg-background px-3 text-sm text-foreground" />
           <p className="text-xs text-muted-foreground">AI-generated summary. This is not a medical diagnosis. Review it with your doctor.</p>
         </div>
       )}

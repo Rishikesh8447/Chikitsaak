@@ -1,16 +1,11 @@
-import { Stethoscope } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-
 export const metadata = {
-  title: "Doctor Dashboard - Chikitsaak",
-  description: "Manage your appointments and availability",
+  title: "Doctor verification | Chikitsaak",
+  description: "Track your professional profile verification status.",
 };
 
 export default async function DoctorDashboardLayout({ children }) {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <PageHeader icon={<Stethoscope />} title="Doctor Dashboard" />
-
+    <div className="mx-auto w-full max-w-5xl px-4 py-7 sm:px-6 sm:py-10">
       {children}
     </div>
   );

@@ -92,7 +92,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 </p>
               </div>
               <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-3 rounded-xl shrink-0">
-                <Coins className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <Coins className="h-5 w-5 text-emerald-600 dark:text-primary" />
               </div>
             </div>
           </CardContent>
@@ -108,7 +108,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 </p>
               </div>
               <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-3 rounded-xl shrink-0">
-                <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-primary" />
               </div>
             </div>
           </CardContent>
@@ -127,7 +127,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 <p className="mt-1 text-xs text-muted-foreground">completed</p>
               </div>
               <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-3 rounded-xl shrink-0">
-                <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <Calendar className="h-5 w-5 text-emerald-600 dark:text-primary" />
               </div>
             </div>
           </CardContent>
@@ -143,7 +143,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 </p>
               </div>
               <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-3 rounded-xl shrink-0">
-                <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-primary" />
               </div>
             </div>
           </CardContent>
@@ -154,7 +154,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
       <Card className="min-w-0 border-border shadow-none">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-foreground flex items-center">
-            <CreditCard className="h-5 w-5 mr-2 text-emerald-600 dark:text-emerald-400" />
+            <CreditCard className="h-5 w-5 mr-2 text-emerald-600 dark:text-primary" />
             Payout Management
           </CardTitle>
         </CardHeader>
@@ -173,7 +173,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                 </Badge>
               ) : (
                 <Badge
-                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-primary"
                 >
                   Available
                 </Badge>
@@ -203,7 +203,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                   </div>
                 </div>
                 <Alert className="mt-2 border-border/80">
-                  <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-primary" />
                   <AlertDescription className="text-xs text-muted-foreground">
                     Your payout request is queued for manual processing. You&apos;ll receive the
                     payment once an admin approves it. Eligible credits are
@@ -235,7 +235,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
             {!pendingPayout && availableCredits > 0 && (
               <Button
                 onClick={() => setShowPayoutDialog(true)}
-                className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                className="mt-4 w-full bg-primary font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Request Payout for All Eligible Credits
               </Button>
@@ -253,7 +253,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
 
           {/* Payout Information */}
           <Alert className="border-border/80">
-            <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-primary" />
             <AlertDescription className="text-xs text-muted-foreground">
               <strong className="text-foreground">Payout Structure:</strong> You earn $8 per credit.
               Platform fee is $2 per credit. Payouts include completed,
@@ -276,7 +276,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                         {format(new Date(payout.createdAt), "MMM d, yyyy")}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {payout.credits} credits • $
+                        {payout.credits} credits · $
                         {payout.netAmount.toFixed(2)}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -286,7 +286,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
                     <Badge
                       className={
                         payout.status === "PROCESSED"
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-primary"
                           : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
                       }
                     >
@@ -334,7 +334,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
               </div>
               <div className="border-t border-border/80 pt-2 flex justify-between font-semibold">
                 <span className="text-foreground">Net payout:</span>
-                <span className="text-emerald-600 dark:text-emerald-400">
+                <span className="text-emerald-600 dark:text-primary">
                   ${availablePayout.toFixed(2)}
                 </span>
               </div>
@@ -357,7 +357,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
             </div>
 
             <Alert className="border-border/80">
-              <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <AlertCircle className="h-4 w-4 text-emerald-600 dark:text-primary" />
               <AlertDescription className="text-xs text-muted-foreground">
                 {availableCredits} eligible credits will be reserved when you
                 submit this request. If an admin declines it, the credits will
@@ -377,7 +377,7 @@ export function DoctorEarnings({ earnings, payouts = [] }) {
               <Button
                 type="submit"
                 disabled={loading}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {loading ? (
                   <>

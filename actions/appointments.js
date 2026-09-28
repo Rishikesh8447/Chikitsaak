@@ -13,6 +13,13 @@ import { getVideoJoinWindowError } from "@/lib/appointment-time.mjs";
 const BOOKING_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const VIDEO_STATUSES = ["CONFIRMED", "IN_PROGRESS"];
 
+function createBookingError(code, message) {
+  const error = new Error(message);
+  error.bookingError = true;
+  error.code = code;
+  return error;
+}
+
 // Initialize Vonage Video API client
 let vonage;
 function getVonage() {
@@ -42,32 +49,41 @@ export async function bookAppointment(formData) {
     const aiSummary = formData.get("aiSummary");
     const aiSpecialtySuggestion = formData.get("aiSpecialtySuggestion");
     if (typeof doctorId !== "string" || !startValue || !endValue || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
-      throw new Error("Invalid appointment details");
+      throw createBookingError("INVALID_APPOINTMENT", "Appointment details are invalid. Please select a new time.");
     }
-    if (aiSummary !== null && (typeof aiSummary !== "string" || aiSummary.length > 5000)) throw new Error("AI summary is invalid");
-    if (aiSpecialtySuggestion !== null && (typeof aiSpecialtySuggestion !== "string" || aiSpecialtySuggestion.length > 120)) throw new Error("AI specialty suggestion is invalid");
+    if (aiSummary !== null && (typeof aiSummary !== "string" || aiSummary.length > 5000)) throw createBookingError("INVALID_APPOINTMENT", "Appointment details are invalid. Please try again.");
+    if (aiSpecialtySuggestion !== null && (typeof aiSpecialtySuggestion !== "string" || aiSpecialtySuggestion.length > 120)) throw createBookingError("INVALID_APPOINTMENT", "Appointment details are invalid. Please try again.");
     if (endTime <= startTime || startTime <= new Date()) {
-      throw new Error("Appointment time must be valid and in the future");
+      throw createBookingError("INVALID_APPOINTMENT", "Choose an appointment time in the future.");
     }
     const durationMinutes = (endTime - startTime) / 60000;
-    if (durationMinutes !== 30) throw new Error("Appointments must be 30 minutes");
+    if (durationMinutes !== 30) throw createBookingError("INVALID_APPOINTMENT", "Appointments must be 30 minutes. Please select a listed slot.");
     const appointment = await db.$transaction(async (tx) => {
       const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" } });
       const doctor = await tx.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
-      if (!patient) throw new Error("Patient not found");
-      if (!doctor) throw new Error("Doctor not found or not verified");
+      if (!patient) throw createBookingError("PATIENT_NOT_FOUND", "Your patient account could not be found. Please sign in again.");
+      if (!doctor) throw createBookingError("DOCTOR_UNAVAILABLE", "This doctor is not currently available for booking.");
       const availability = await tx.availability.findMany({ where: { doctorId, status: "AVAILABLE" } });
       const minutes = (value) => value.getHours() * 60 + value.getMinutes();
       if (!availability.some((window) => (window.dayOfWeek === null || window.dayOfWeek === startTime.getDay()) && (!window.blockedDate || new Date(window.blockedDate).toDateString() !== startTime.toDateString()) && minutes(window.startTime) <= minutes(startTime) && minutes(window.endTime) >= minutes(endTime))) {
-        throw new Error("The selected time is outside the doctor's availability");
+        throw createBookingError("SLOT_UNAVAILABLE", "The selected time is no longer available. Please choose another slot.");
       }
       const conflict = { startTime: { lt: endTime }, endTime: { gt: startTime } };
       const doctorConflict = await tx.appointment.findFirst({ where: { doctorId, status: { in: BOOKING_STATUSES }, ...conflict } });
       const patientConflict = await tx.appointment.findFirst({ where: { patientId: patient.id, status: { in: BOOKING_STATUSES }, ...conflict } });
-      if (doctorConflict) throw new Error("This time slot is already booked");
-      if (patientConflict) throw new Error("You already have an appointment at this time");
+      if (doctorConflict) throw createBookingError("SLOT_UNAVAILABLE", "This time slot was just booked. Please choose another slot.");
+      if (patientConflict) throw createBookingError("PATIENT_CONFLICT", "You already have an appointment at this time.");
       const debit = await tx.user.updateMany({ where: { id: patient.id, credits: { gte: 2 } }, data: { credits: { decrement: 2 } } });
-      if (debit.count !== 1) throw new Error("Insufficient credits to book an appointment");
+      if (debit.count !== 1) {
+        const currentPatient = await tx.user.findUnique({
+          where: { id: patient.id },
+          select: { credits: true },
+        });
+        const insufficientCreditsError = createBookingError("INSUFFICIENT_CREDITS", "Insufficient credits");
+        insufficientCreditsError.available = currentPatient?.credits ?? 0;
+        insufficientCreditsError.required = 2;
+        throw insufficientCreditsError;
+      }
       await tx.user.update({ where: { id: doctor.id }, data: { credits: { increment: 2 } } });
       const newAppointment = await tx.appointment.create({ data: { patientId: patient.id, doctorId, startTime, endTime, patientDescription, aiSummary: typeof aiSummary === "string" && aiSummary.trim() ? aiSummary.trim() : null, aiSpecialtySuggestion: typeof aiSpecialtySuggestion === "string" && aiSpecialtySuggestion.trim() ? aiSpecialtySuggestion.trim() : null, status: "SCHEDULED" } });
       await tx.creditTransaction.createMany({ data: [
@@ -88,6 +104,23 @@ export async function bookAppointment(formData) {
     revalidatePath("/appointments");
     return { success: true, appointment: appointment };
   } catch (error) {
+    if (error?.bookingError && error.code === "INSUFFICIENT_CREDITS") {
+      return {
+        success: false,
+        code: "INSUFFICIENT_CREDITS",
+        message: `Insufficient credits. You have ${error.available} credits, but this appointment requires ${error.required} credits.`,
+      };
+    }
+    if (error?.bookingError) {
+      return { success: false, code: error.code, message: error.message };
+    }
+    if (error?.code === "P2034") {
+      return {
+        success: false,
+        code: "SLOT_UNAVAILABLE",
+        message: "This time slot was just booked or changed. Please refresh and choose another slot.",
+      };
+    }
     console.error("Failed to book appointment:", error);
     throw new Error("Failed to book appointment. Please try again.");
   }

@@ -49,23 +49,34 @@ function hasValidReservation(reservation, payout) {
 }
 
 async function getClerkDisplayName(clerkUserId, fallbackName) {
+  const databaseName = normalizeDoctorName(fallbackName);
+
   if (!clerkUserId) {
-    return fallbackName;
+    return databaseName;
   }
 
   try {
     const client = await clerkClient();
     const clerkUser = await client.users.getUser(clerkUserId);
     const displayName = [clerkUser.firstName, clerkUser.lastName]
+      .map(normalizeDoctorName)
       .filter(Boolean)
       .join(" ")
       .trim();
 
-    return displayName || fallbackName;
+    return displayName || databaseName;
   } catch (error) {
     console.error("Failed to resolve Clerk display name.");
-    return fallbackName;
+    return databaseName;
   }
+}
+
+function normalizeDoctorName(value) {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  return name && !/^(null|undefined)(\s+(null|undefined))*$/i.test(name)
+    ? name
+    : null;
 }
 
 async function hydrateDoctorNames(doctors) {

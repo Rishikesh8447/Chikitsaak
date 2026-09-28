@@ -88,7 +88,7 @@ export function PendingPayouts({ payouts }) {
     <div>
       <Card className="bg-muted/20 border-emerald-900/20">
         <CardHeader>
-          <CardTitle className="text-xl font-bold text-white">
+          <CardTitle className="text-xl font-bold text-foreground">
             Pending Payouts
           </CardTitle>
           <CardDescription>
@@ -111,10 +111,10 @@ export function PendingPayouts({ payouts }) {
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div className="flex items-start gap-3">
                         <div className="bg-muted/20 rounded-full p-2 mt-1">
-                          <User className="h-5 w-5 text-emerald-400" />
+                          <User className="h-5 w-5 text-primary" />
                         </div>
                         <div className="flex-1">
-                          <h3 className="font-medium text-white">
+                          <h3 className="font-medium text-foreground">
                             Dr. {payout.doctor.name}
                           </h3>
                           <p className="text-sm text-muted-foreground">
@@ -122,14 +122,14 @@ export function PendingPayouts({ payouts }) {
                           </p>
                           <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">
                             <div className="flex items-center">
-                              <DollarSign className="h-4 w-4 mr-1 text-emerald-400" />
+                              <DollarSign className="h-4 w-4 mr-1 text-primary" />
                               <span>
-                                {payout.credits} credits • $
+                                {payout.credits} credits · $
                                 {payout.netAmount.toFixed(2)}
                               </span>
                             </div>
                             <div className="flex items-center">
-                              <Mail className="h-4 w-4 mr-1 text-emerald-400" />
+                              <Mail className="h-4 w-4 mr-1 text-primary" />
                               <span className="text-xs">
                                 {payout.paypalEmail}
                               </span>
@@ -147,7 +147,7 @@ export function PendingPayouts({ payouts }) {
                       <div className="flex flex-col sm:flex-row gap-2 self-end lg:self-center">
                         <Badge
                           variant="outline"
-                          className="bg-amber-900/20 border-amber-900/30 text-amber-400 w-fit"
+                          className="w-fit border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"
                         >
                           Pending
                         </Badge>
@@ -163,7 +163,7 @@ export function PendingPayouts({ payouts }) {
                           <Button
                             size="sm"
                             onClick={() => handleApprovePayout(payout)}
-                            className="bg-emerald-600 hover:bg-emerald-700"
+                            className="bg-primary hover:bg-primary/90"
                           >
                             <Check className="h-4 w-4 mr-1" />
                             Approve
@@ -185,7 +185,7 @@ export function PendingPayouts({ payouts }) {
         <Dialog open={!!selectedPayout} onOpenChange={closeDialogs}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-white">
+              <DialogTitle className="text-xl font-bold text-foreground">
                 Payout Request Details
               </DialogTitle>
               <DialogDescription>
@@ -197,15 +197,15 @@ export function PendingPayouts({ payouts }) {
               {/* Doctor Information */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Stethoscope className="h-5 w-5 text-emerald-400" />
-                  <h3 className="text-white font-medium">Doctor Information</h3>
+                  <Stethoscope className="h-5 w-5 text-primary" />
+                  <h3 className="text-foreground font-medium">Doctor Information</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">
                       Name
                     </p>
-                    <p className="text-white">
+                    <p className="text-foreground">
                       Dr. {selectedPayout.doctor.name}
                     </p>
                   </div>
@@ -213,13 +213,13 @@ export function PendingPayouts({ payouts }) {
                     <p className="text-sm font-medium text-muted-foreground">
                       Email
                     </p>
-                    <p className="text-white">{selectedPayout.doctor.email}</p>
+                    <p className="text-foreground">{selectedPayout.doctor.email}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">
                       Specialty
                     </p>
-                    <p className="text-white">
+                    <p className="text-foreground">
                       {selectedPayout.doctor.specialty}
                     </p>
                   </div>
@@ -227,7 +227,7 @@ export function PendingPayouts({ payouts }) {
                     <p className="text-sm font-medium text-muted-foreground">
                       Current Credits
                     </p>
-                    <p className="text-white">
+                    <p className="text-foreground">
                       {selectedPayout.doctor.credits}
                     </p>
                   </div>
@@ -237,15 +237,15 @@ export function PendingPayouts({ payouts }) {
               {/* Payout Information */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-emerald-400" />
-                  <h3 className="text-white font-medium">Payout Details</h3>
+                  <DollarSign className="h-5 w-5 text-primary" />
+                  <h3 className="text-foreground font-medium">Payout Details</h3>
                 </div>
                 <div className="bg-muted/20 p-4 rounded-lg border border-emerald-900/20 space-y-3">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
                       Credits to pay out:
                     </span>
-                    <span className="text-white font-medium">
+                    <span className="text-foreground font-medium">
                       {selectedPayout.credits}
                     </span>
                   </div>
@@ -253,7 +253,7 @@ export function PendingPayouts({ payouts }) {
                     <span className="text-muted-foreground">
                       Gross amount (10 USD/credit):
                     </span>
-                    <span className="text-white">
+                    <span className="text-foreground">
                       ${selectedPayout.amount.toFixed(2)}
                     </span>
                   </div>
@@ -261,13 +261,13 @@ export function PendingPayouts({ payouts }) {
                     <span className="text-muted-foreground">
                       Platform fee (2 USD/credit):
                     </span>
-                    <span className="text-white">
+                    <span className="text-foreground">
                       -${selectedPayout.platformFee.toFixed(2)}
                     </span>
                   </div>
                   <div className="border-t border-emerald-900/20 pt-3 flex justify-between font-medium">
-                    <span className="text-white">Net payout:</span>
-                    <span className="text-emerald-400">
+                    <span className="text-foreground">Net payout:</span>
+                    <span className="text-primary">
                       ${selectedPayout.netAmount.toFixed(2)}
                     </span>
                   </div>
@@ -275,7 +275,7 @@ export function PendingPayouts({ payouts }) {
                     <p className="text-sm font-medium text-muted-foreground">
                       PayPal Email
                     </p>
-                    <p className="text-white">{selectedPayout.paypalEmail}</p>
+                    <p className="text-foreground">{selectedPayout.paypalEmail}</p>
                   </div>
                 </div>
               </div>
@@ -292,7 +292,7 @@ export function PendingPayouts({ payouts }) {
               </Button>
               <Button
                 onClick={() => handleApprovePayout(selectedPayout)}
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-primary hover:bg-primary/90"
               >
                 <Check className="h-4 w-4 mr-1" />
                 Approve Payout
@@ -310,7 +310,7 @@ export function PendingPayouts({ payouts }) {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-white">
+              <DialogTitle className="text-xl font-bold text-foreground">
                 Confirm Payout Approval
               </DialogTitle>
               <DialogDescription>
@@ -337,19 +337,19 @@ export function PendingPayouts({ payouts }) {
               <div className="bg-muted/20 p-4 rounded-lg border border-emerald-900/20">
                 <div className="flex justify-between mb-2">
                   <span className="text-muted-foreground">Doctor:</span>
-                  <span className="text-white">
+                  <span className="text-foreground">
                     Dr. {selectedPayout.doctor.name}
                   </span>
                 </div>
                 <div className="flex justify-between mb-2">
                   <span className="text-muted-foreground">Amount to pay:</span>
-                  <span className="text-emerald-400 font-medium">
+                  <span className="text-primary font-medium">
                     ${selectedPayout.netAmount.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">PayPal:</span>
-                  <span className="text-white text-sm">
+                  <span className="text-foreground text-sm">
                     {selectedPayout.paypalEmail}
                   </span>
                 </div>
@@ -370,7 +370,7 @@ export function PendingPayouts({ payouts }) {
               <Button
                 onClick={confirmApproval}
                 disabled={loading}
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-primary hover:bg-primary/90"
               >
                 {loading ? (
                   <>

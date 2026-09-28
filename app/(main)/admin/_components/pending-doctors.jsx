@@ -26,6 +26,27 @@ import useFetch from "@/hooks/use-fetch";
 import { useEffect } from "react";
 import { BarLoader } from "react-spinners";
 
+function doctorDisplayName(value) {
+  if (typeof value !== "string") return "Name unavailable";
+  const name = value.trim();
+  return name && !/^(null|undefined)(\s+(null|undefined))*$/i.test(name)
+    ? name
+    : "Name unavailable";
+}
+
+function doctorExperience(value, includeDescriptor = false) {
+  if (!Number.isInteger(value) || value < 0) return "Experience not provided";
+  return `${value} years${includeDescriptor ? " experience" : ""}`;
+}
+
+function doctorSpecialty(value) {
+  if (typeof value !== "string") return "Specialty not provided";
+  const specialty = value.trim();
+  return specialty && !/^(null|undefined)$/i.test(specialty)
+    ? specialty
+    : "Specialty not provided";
+}
+
 export function PendingDoctors({ doctors }) {
   const [selectedDoctor, setSelectedDoctor] = useState(null);
 
@@ -67,7 +88,7 @@ export function PendingDoctors({ doctors }) {
     <div>
       <Card className="border-border shadow-none">
         <CardHeader>
-          <CardTitle className="text-xl font-bold text-white">
+          <CardTitle className="text-xl font-bold text-foreground">
             Pending Doctor Verifications
           </CardTitle>
           <CardDescription>
@@ -93,19 +114,18 @@ export function PendingDoctors({ doctors }) {
                           <User className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                          <h3 className="font-medium text-white">
-                            {doctor.name}
+                          <h3 className="font-medium text-foreground">
+                            {doctorDisplayName(doctor.name)}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {doctor.specialty} • {doctor.experience} years
-                            experience
+                            {doctorSpecialty(doctor.specialty)} · {doctorExperience(doctor.experience, true)}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 self-end md:self-auto">
                         <Badge
                           variant="outline"
-                          className="bg-amber-900/20 border-amber-900/30 text-amber-400"
+                          className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"
                         >
                           Pending
                         </Badge>
@@ -132,7 +152,7 @@ export function PendingDoctors({ doctors }) {
         <Dialog open={!!selectedDoctor} onOpenChange={handleCloseDialog}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-white">
+              <DialogTitle className="text-xl font-bold text-foreground">
                 Doctor Verification Details
               </DialogTitle>
               <DialogDescription>
@@ -148,15 +168,15 @@ export function PendingDoctors({ doctors }) {
                   <h4 className="text-sm font-medium text-muted-foreground">
                     Full Name
                   </h4>
-                  <p className="text-base font-medium text-white">
-                    {selectedDoctor.name}
+                  <p className="text-base font-medium text-foreground">
+                    {doctorDisplayName(selectedDoctor.name)}
                   </p>
                 </div>
                 <div className="space-y-1 flex-1">
                   <h4 className="text-sm font-medium text-muted-foreground">
                     Email
                   </h4>
-                  <p className="text-base font-medium text-white">
+                  <p className="text-base font-medium text-foreground">
                     {selectedDoctor.email}
                   </p>
                 </div>
@@ -164,7 +184,7 @@ export function PendingDoctors({ doctors }) {
                   <h4 className="text-sm font-medium text-muted-foreground">
                     Application Date
                   </h4>
-                  <p className="text-base font-medium text-white">
+                  <p className="text-base font-medium text-foreground">
                     {format(new Date(selectedDoctor.createdAt), "PPP")}
                   </p>
                 </div>
@@ -175,8 +195,8 @@ export function PendingDoctors({ doctors }) {
               {/* Professional Details */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Medal className="h-5 w-5 text-emerald-400" />
-                  <h3 className="text-white font-medium">
+                  <Medal className="h-5 w-5 text-primary" />
+                  <h3 className="text-foreground font-medium">
                     Professional Information
                   </h3>
                 </div>
@@ -186,16 +206,14 @@ export function PendingDoctors({ doctors }) {
                     <h4 className="text-sm font-medium text-muted-foreground">
                       Specialty
                     </h4>
-                    <p className="text-white">{selectedDoctor.specialty}</p>
+                    <p className="text-foreground">{doctorSpecialty(selectedDoctor.specialty)}</p>
                   </div>
 
                   <div className="space-y-1">
                     <h4 className="text-sm font-medium text-muted-foreground">
                       Years of Experience
                     </h4>
-                    <p className="text-white">
-                      {selectedDoctor.experience} years
-                    </p>
+                    <p className="text-foreground">{doctorExperience(selectedDoctor.experience)}</p>
                   </div>
 
                   <div className="space-y-1 col-span-2">
@@ -207,7 +225,7 @@ export function PendingDoctors({ doctors }) {
                         href={selectedDoctor.credentialUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-emerald-400 hover:text-emerald-300 flex items-center"
+                        className="text-primary hover:text-emerald-300 flex items-center"
                       >
                         View Credentials
                         <ExternalLink className="h-4 w-4 ml-1" />
@@ -222,8 +240,8 @@ export function PendingDoctors({ doctors }) {
               {/* Description */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-emerald-400" />
-                  <h3 className="text-white font-medium">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <h3 className="text-foreground font-medium">
                     Service Description
                   </h3>
                 </div>
@@ -252,7 +270,7 @@ export function PendingDoctors({ doctors }) {
                   handleUpdateStatus(selectedDoctor.id, "VERIFIED")
                 }
                 disabled={loading}
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-primary hover:bg-primary/90"
               >
                 <Check className="mr-2 h-4 w-4" />
                 Approve

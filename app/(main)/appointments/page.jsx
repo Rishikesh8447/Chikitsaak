@@ -21,10 +21,11 @@ export default async function PatientAppointmentsPage({ searchParams }) {
   const [{ appointments, error }, analytics] = await Promise.all([getPatientAppointments(), getPatientAnalytics(range)]);
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+    <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-7 sm:px-6 sm:py-9">
       <PageHeader
         icon={<Calendar />}
         title="My Appointments"
+        description="Review your consultations, join upcoming visits, and manage your schedule."
         backLink="/doctors"
         backLabel="Find Doctors"
       />
@@ -33,7 +34,7 @@ export default async function PatientAppointmentsPage({ searchParams }) {
 
       <Card className="border-border">
         <CardHeader>
-          <CardTitle className="text-xl font-bold text-slate-900 dark:text-white flex items-center">
+          <CardTitle className="flex items-center text-base font-semibold tracking-tight text-foreground">
             <Calendar className="mr-2 h-5 w-5 text-primary" />
             Your Scheduled Appointments
           </CardTitle>
@@ -41,7 +42,7 @@ export default async function PatientAppointmentsPage({ searchParams }) {
         <CardContent>
           {error ? (
             <div className="text-center py-8">
-              <p className="text-red-500 font-medium">Error: {error}</p>
+              <p role="alert" className="font-medium text-destructive">Appointments could not be loaded: {error}</p>
             </div>
           ) : appointments?.length > 0 ? (
             <div className="space-y-4">
@@ -54,18 +55,18 @@ export default async function PatientAppointmentsPage({ searchParams }) {
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center text-center py-10 px-4">
-              <div className="bg-emerald-500/10 dark:bg-emerald-500/20 p-4 rounded-full mb-3">
-                <Calendar className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+              <div className="mb-3 flex size-12 items-center justify-center rounded-xl bg-primary/10">
+                <Calendar className="size-6 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
+              <h3 className="mb-1 text-lg font-semibold text-foreground">
                 No appointments scheduled
               </h3>
-              <p className="text-slate-600 dark:text-slate-300 text-sm max-w-sm">
+              <p className="max-w-sm text-sm leading-6 text-muted-foreground">
                 You don&apos;t have any appointments scheduled yet. Browse our
                 doctors and book your first consultation.
               </p>
-              <Link href="/doctors" className="mt-4 inline-flex text-sm font-semibold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400">Find a doctor &rarr;</Link>
+              <Link href="/doctors" className="mt-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary hover:underline">Find a doctor <span aria-hidden="true" className="ml-1">→</span></Link>
             </div>
           )}
         </CardContent>
