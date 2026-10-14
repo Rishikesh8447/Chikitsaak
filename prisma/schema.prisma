@@ -39,6 +39,11 @@ model User {
   prescriptionsAsPatient Prescription[]      @relation("PrescriptionPatient")
   reviewsReceived        Review[]            @relation("ReviewDoctor")
   reviewsGiven           Review[]            @relation("ReviewPatient")
+  laboratoryMemberships  LaboratoryMembership[]
+  doctorLabOrders        LabOrder[]          @relation("LabOrderDoctor")
+  patientLabOrders       LabOrder[]          @relation("LabOrderPatient")
+  labOrderActions        LabOrderStatusHistory[] @relation("LabOrderHistoryActor")
+  laboratoryAuditEvents  LaboratoryAuditEvent[]
 
   @@index([city])
   @@index([state])
@@ -81,6 +86,7 @@ model Appointment {
   notifications         Notification[]
   prescription          Prescription?
   review                Review?
+  labOrders             LabOrder[]
 
   @@index([status, startTime])
   @@index([doctorId, startTime])
@@ -191,6 +197,169 @@ model Review {
   @@index([patientId, createdAt])
 }
 
+model Laboratory {
+  id                 String                 @id @default(uuid())
+  name               String
+  legalName          String
+  registrationNumber String
+  /// SQL CHECK constraint in the additive laboratory migration enforces this normalized key.
+  registrationNumberNormalized String        @unique
+  contactEmail       String
+  contactPhone       String
+  address            String
+  city               String
+  state              String
+  country            String
+  status             LaboratoryStatus       @default(PENDING)
+  statusReason       String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  memberships        LaboratoryMembership[]
+  offerings          LaboratoryOffering[]
+  orders             LabOrder[]
+  auditEvents        LaboratoryAuditEvent[]
+
+  @@index([status, createdAt])
+  @@index([country, state, city])
+}
+
+model LaboratoryMembership {
+  id             String                     @id @default(uuid())
+  laboratoryId   String
+  userId         String
+  role           LaboratoryRole              @default(STAFF)
+  status         LaboratoryMembershipStatus  @default(ACTIVE)
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  laboratory     Laboratory                  @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  user           User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labOrderActions LabOrderStatusHistory[]    @relation("LabOrderMembershipActor")
+
+  @@unique([laboratoryId, userId])
+  @@index([userId, status])
+  @@index([laboratoryId, status, role])
+}
+
+model LabTest {
+  id          String                @id @default(uuid())
+  name        String
+  /// SQL CHECK constraint in the additive laboratory migration enforces this normalized key.
+  normalizedName String             @unique
+  code        String?               @unique
+  category    String?
+  description String?
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  offerings   LaboratoryOffering[]
+  orderItems  LabOrderItem[]
+
+  @@index([isActive, name])
+}
+
+model LaboratoryOffering {
+  id                       String       @id @default(uuid())
+  laboratoryId             String
+  labTestId                String
+  price                    Decimal      @db.Decimal(10, 2)
+  isAvailable              Boolean      @default(true)
+  preparationInstructions String?
+  estimatedHours           Int?
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+  laboratory               Laboratory   @relation(fields: [laboratoryId], references: [id], onDelete: Cascade)
+  labTest                  LabTest      @relation(fields: [labTestId], references: [id], onDelete: Restrict)
+  orderItems               LabOrderItem[]
+
+  @@unique([laboratoryId, labTestId])
+  @@unique([id, laboratoryId, labTestId])
+  @@index([labTestId, isAvailable])
+  @@index([laboratoryId, isAvailable])
+}
+
+model LabOrder {
+  id                   String                    @id @default(uuid())
+  patientId            String
+  doctorId             String?
+  appointmentId        String?
+  laboratoryId         String?
+  source               LabOrderSource
+  status               LabOrderStatus             @default(AWAITING_LAB_SELECTION)
+  clinicalInstructions String?
+  collectionAt         DateTime?
+  collectionNotes      String?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  patient              User                       @relation("LabOrderPatient", fields: [patientId], references: [id], onDelete: Restrict)
+  doctor               User?                      @relation("LabOrderDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  // Keep doctor-order provenance intact: appointment deletion is blocked while
+  // an order references it. Cancel appointments by status instead.
+  appointment          Appointment?               @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  laboratory           Laboratory?                @relation(fields: [laboratoryId], references: [id], onDelete: SetNull)
+  items                LabOrderItem[]
+  statusHistory        LabOrderStatusHistory[]
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, createdAt])
+  @@index([laboratoryId, status, createdAt])
+  @@index([appointmentId])
+}
+
+model LabOrderItem {
+  id                    String              @id @default(uuid())
+  labOrderId            String
+  labTestId             String
+  /// SQL CHECK constraints and deferred triggers enforce valid all-null/all-assigned tuples and order/appointment provenance.
+  laboratoryOfferingId  String?
+  laboratoryId          String?
+  testName              String
+  testCategory          String?
+  testDescription       String?
+  priceAtBooking        Decimal?            @db.Decimal(10, 2)
+  labOrder              LabOrder             @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  labTest               LabTest             @relation(fields: [labTestId], references: [id], onDelete: Restrict)
+  laboratoryOffering    LaboratoryOffering? @relation(fields: [laboratoryOfferingId, laboratoryId, labTestId], references: [id, laboratoryId, labTestId], onDelete: Restrict)
+
+  @@unique([labOrderId, labTestId])
+  @@index([labTestId])
+}
+
+model LabOrderStatusHistory {
+  id                      String                    @id @default(uuid())
+  labOrderId              String
+  actorUserId             String?
+  membershipId            String?
+  fromStatus              LabOrderStatus?
+  toStatus                LabOrderStatus
+  note                    String?
+  createdAt               DateTime                  @default(now())
+  labOrder                LabOrder                  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  actor                   User?                     @relation("LabOrderHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  membership              LaboratoryMembership?     @relation("LabOrderMembershipActor", fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([labOrderId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model LaboratoryAuditEvent {
+  id             String       @id @default(uuid())
+  actorUserId    String?
+  laboratoryId   String?
+  entityType     String
+  entityId       String
+  action         String
+  fromStatus     String?
+  toStatus       String?
+  reason         String?
+  createdAt      DateTime     @default(now())
+  actor          User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  laboratory     Laboratory? @relation(fields: [laboratoryId], references: [id], onDelete: SetNull)
+
+  @@index([laboratoryId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
 enum UserRole {
   UNASSIGNED
   PATIENT
@@ -237,6 +406,7 @@ enum NotificationType {
   PAYOUT_STATUS
   CREDIT_TRANSACTION
   PRESCRIPTION_AVAILABLE
+  LAB_ORDER_UPDATE
 }
 
 enum ReminderType {
@@ -249,4 +419,37 @@ enum PayoutStatus {
   COMPLETED
   FAILED
   PROCESSED
+}
+
+enum LaboratoryStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum LaboratoryRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum LaboratoryMembershipStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum LabOrderSource {
+  DOCTOR
+  PATIENT
+}
+
+enum LabOrderStatus {
+  AWAITING_LAB_SELECTION
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  COLLECTION_SCHEDULED
+  COLLECTED
+  CANCELLED
 }
