@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Users, CreditCard, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { AdminLabNavLink, AdminTabsRoot } from "./_components/admin-tabs-root";
+import { AdminLabNavLink, AdminPharmacyNavLink, AdminTabsRoot } from "./_components/admin-tabs-root";
 
 export const metadata = {
   title: "Administration | Chikitsaak",
@@ -54,6 +54,7 @@ export default async function AdminLayout({ children }) {
             </TabsTrigger>
           </TabsList>
           <AdminLabNavLink />
+          <AdminPharmacyNavLink />
         </div>
 
         <div className="min-w-0 w-full space-y-6">

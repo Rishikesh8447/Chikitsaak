@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -124,6 +125,15 @@ export default function OnboardingPage() {
                 "Continue as Patient"
               )}
             </Button>
+          </CardContent>
+        </Card>
+        <Card className="border-emerald-900/20 transition-all">
+          <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
+            <div className="p-4 bg-emerald-900/20 rounded-full mb-4"><Stethoscope className="h-8 w-8 text-primary" /></div>
+            <CardTitle className="text-xl font-semibold text-foreground mb-2">Laboratory or Pharmacy partner</CardTitle>
+            <CardDescription className="mb-4">Apply for an organization workspace. Admin approval is required before partner operations are enabled.</CardDescription>
+            <Button render={<Link href="/laboratory/workspace" />} variant="outline" className="w-full mt-2">Laboratory onboarding</Button>
+            <Button render={<Link href="/pharmacy/workspace" />} variant="outline" className="w-full mt-2">Chemist / Pharmacy onboarding</Button>
           </CardContent>
         </Card>
 
