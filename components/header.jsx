@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Show } from "@clerk/nextjs";
-import { CalendarDays, CreditCard, FileHeart, LayoutDashboard, Search, ShieldCheck, UserRound } from "lucide-react";
+import { CalendarDays, CreditCard, FileHeart, FlaskConical, LayoutDashboard, Search, ShieldCheck, UserRound } from "lucide-react";
 import ThemeToggle from "./theme-toggle";
 import { checkUser } from "@/lib/checkUser";
 import HeaderAuth from "./header-auth";
@@ -12,8 +12,12 @@ const roleLinks = {
     { href: "/doctors", label: "Find care", icon: Search },
     { href: "/appointments", label: "Appointments", icon: CalendarDays },
     { href: "/medical-records", label: "Medical records", icon: FileHeart },
+    { href: "/laboratory", label: "Lab tests", icon: FlaskConical },
   ],
-  DOCTOR: [{ href: "/doctor", label: "Doctor workspace", icon: LayoutDashboard }],
+  DOCTOR: [
+    { href: "/doctor", label: "Doctor workspace", icon: LayoutDashboard },
+    { href: "/doctor/laboratory", label: "Order lab tests", icon: FlaskConical },
+  ],
   ADMIN: [{ href: "/admin", label: "Administration", icon: ShieldCheck }],
   UNASSIGNED: [{ href: "/onboarding", label: "Complete profile", icon: UserRound }],
 };
