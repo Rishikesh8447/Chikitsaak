@@ -44,6 +44,8 @@ model User {
   patientLabOrders       LabOrder[]          @relation("LabOrderPatient")
   labOrderActions        LabOrderStatusHistory[] @relation("LabOrderHistoryActor")
   laboratoryAuditEvents  LaboratoryAuditEvent[]
+  pharmacyMemberships    PharmacyMembership[]
+  pharmacyAuditEvents    PharmacyAuditEvent[]
 
   @@index([city])
   @@index([state])
@@ -360,6 +362,77 @@ model LaboratoryAuditEvent {
   @@index([actorUserId, createdAt])
 }
 
+model Pharmacy {
+  id                      String               @id @default(uuid())
+  name                    String
+  legalName               String
+  licenseNumber           String
+  licenseNumberNormalized String               @unique
+  contactEmail            String
+  contactPhone            String
+  address                 String
+  city                    String
+  state                   String
+  country                 String
+  status                  PharmacyStatus       @default(PENDING)
+  statusReason            String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  memberships             PharmacyMembership[]
+  products                PharmacyProduct[]
+  auditEvents             PharmacyAuditEvent[]
+
+  @@index([status, createdAt])
+  @@index([country, state, city])
+}
+
+model PharmacyMembership {
+  id          String                   @id @default(uuid())
+  pharmacyId  String
+  userId      String
+  role        PharmacyRole             @default(STAFF)
+  status      PharmacyMembershipStatus @default(ACTIVE)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  pharmacy    Pharmacy                 @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pharmacyId, userId])
+  @@index([userId, status])
+  @@index([pharmacyId, status, role])
+}
+
+model PharmacyProduct {
+  id          String   @id @default(uuid())
+  pharmacyId  String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([pharmacyId, isAvailable, name])
+}
+
+model PharmacyAuditEvent {
+  id          String    @id @default(uuid())
+  actorUserId String?
+  pharmacyId  String?
+  entityId    String
+  action      String
+  fromStatus  String?
+  toStatus    String?
+  reason      String?
+  createdAt   DateTime  @default(now())
+  actor       User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  pharmacy    Pharmacy? @relation(fields: [pharmacyId], references: [id], onDelete: SetNull)
+
+  @@index([pharmacyId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
 enum UserRole {
   UNASSIGNED
   PATIENT
@@ -426,6 +499,24 @@ enum LaboratoryStatus {
   VERIFIED
   REJECTED
   SUSPENDED
+}
+
+enum PharmacyStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum PharmacyRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum PharmacyMembershipStatus {
+  ACTIVE
+  REVOKED
 }
 
 enum LaboratoryRole {

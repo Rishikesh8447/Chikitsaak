@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Tabs } from "@/components/ui/tabs";
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Pill } from "lucide-react";
 
 export function AdminTabsRoot({ children, className }) {
   const pathname = usePathname();
@@ -27,5 +27,13 @@ export function AdminLabNavLink() {
   >
     <FlaskConical className="size-4 shrink-0" />
     <span>Laboratories</span>
+  </Link>;
+}
+
+export function AdminPharmacyNavLink() {
+  const active = usePathname() === "/admin/pharmacy";
+  return <Link href="/admin/pharmacy" aria-current={active ? "page" : undefined} data-active={active ? "true" : undefined}
+    className={`flex min-h-10 min-w-0 items-center justify-start gap-1.5 whitespace-normal rounded-md border px-2 py-2 text-left text-xs font-medium leading-tight transition-colors lg:justify-start lg:whitespace-nowrap lg:w-full lg:h-auto lg:flex-none ${active ? "border-primary/20 bg-primary/10 font-semibold text-primary" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+    <Pill className="size-4 shrink-0" /><span>Pharmacies</span>
   </Link>;
 }
