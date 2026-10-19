@@ -1,11 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Show } from "@clerk/nextjs";
-import { CalendarDays, CreditCard, FileHeart, FlaskConical, LayoutDashboard, Pill, Search, ShieldCheck, UserRound } from "lucide-react";
+import { CalendarDays, CreditCard, FileHeart, FlaskConical, LayoutDashboard, Pill, Search, ShieldCheck, UserRound, Users, ClipboardList, Package } from "lucide-react";
 import ThemeToggle from "./theme-toggle";
 import { checkUser } from "@/lib/checkUser";
 import HeaderAuth from "./header-auth";
 import { NotificationCenter } from "./notification-center";
+import { db } from "@/lib/prisma";
 
 const roleLinks = {
   PATIENT: [
@@ -26,7 +27,29 @@ const roleLinks = {
 
 const Header = async ({ user: initialUser } = {}) => {
   const user = initialUser === undefined ? await checkUser() : initialUser;
-  const links = roleLinks[user?.role] || [];
+  const partnerMemberships = user && ["PATIENT", "DOCTOR", "UNASSIGNED"].includes(user.role)
+    ? await Promise.all([
+        db.laboratoryMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
+        db.pharmacyMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
+      ])
+    : [];
+  const isLaboratoryPartner = Boolean(partnerMemberships[0]);
+  const isPharmacyPartner = Boolean(partnerMemberships[1]);
+  const isPartner = isLaboratoryPartner || isPharmacyPartner;
+  const links = isPartner ? [
+    ...(isLaboratoryPartner ? [
+      { href: "/laboratory/workspace", label: "Laboratory", icon: FlaskConical },
+      { href: "/laboratory/workspace#offerings", label: "Test offerings", icon: ClipboardList },
+      { href: "/laboratory/workspace#orders", label: "Assigned orders", icon: CalendarDays },
+      { href: "/laboratory/workspace#organization", label: "Organization", icon: Users },
+    ] : []),
+    ...(isPharmacyPartner ? [
+      { href: "/pharmacy/workspace", label: "Pharmacy", icon: Pill },
+      { href: "/pharmacy/workspace#catalog", label: "Product catalogue", icon: Package },
+      { href: "/pharmacy/workspace#requests", label: "Requests & orders", icon: ClipboardList },
+      { href: "/pharmacy/workspace#organization", label: "Organization", icon: Users },
+    ] : []),
+  ] : roleLinks[user?.role] || [];
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/90 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
@@ -52,7 +75,7 @@ const Header = async ({ user: initialUser } = {}) => {
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Show when="signed-in">
-            {user?.role !== "ADMIN" && user && <Link href="/credits" aria-label={`Open credit balance: ${user.credits} credits`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 sm:px-3"><CreditCard className="size-3.5" /><span>{user.credits}</span><span className="hidden sm:inline">credits</span></Link>}
+            {user?.role !== "ADMIN" && !isPartner && user && <Link href="/credits" aria-label={`Open credit balance: ${user.credits} credits`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 sm:px-3"><CreditCard className="size-3.5" /><span>{user.credits}</span><span className="hidden sm:inline">credits</span></Link>}
             {user && <NotificationCenter />}
           </Show>
           <ThemeToggle />

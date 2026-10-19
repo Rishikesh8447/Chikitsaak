@@ -187,6 +187,8 @@ export async function getLaboratoryWorkspace(requestedLaboratoryId) {
   });
   if (!memberships.length) return { memberships: [], selected: null, offerings: [], orders: [] };
   const selected = memberships.find((membership) => membership.laboratoryId === requestedLaboratoryId) || memberships[0];
+  const isVerified = selected.laboratory.status === "VERIFIED";
+  const canManageOfferings = ["OWNER", "MANAGER"].includes(selected.role);
   const [offerings, orders, tests, team] = await Promise.all([
     db.laboratoryOffering.findMany({
       where: { laboratoryId: selected.laboratoryId },
@@ -204,8 +206,12 @@ export async function getLaboratoryWorkspace(requestedLaboratoryId) {
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    db.labTest.findMany({ where: { isActive: true }, select: { id: true, name: true, category: true }, orderBy: { name: "asc" } }),
-    db.laboratoryMembership.findMany({ where: { laboratoryId: selected.laboratoryId, status: "ACTIVE" }, select: { id: true, role: true, user: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } }),
+    isVerified && canManageOfferings
+      ? db.labTest.findMany({ where: { isActive: true }, select: { id: true, name: true, category: true }, orderBy: { name: "asc" } })
+      : Promise.resolve([]),
+    selected.role === "OWNER" && isVerified
+      ? db.laboratoryMembership.findMany({ where: { laboratoryId: selected.laboratoryId, status: "ACTIVE" }, select: { id: true, role: true, user: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } })
+      : Promise.resolve([]),
   ]);
   return {
     memberships: memberships.map(({ id, laboratoryId, role, laboratory }) => ({ id, laboratoryId, role, laboratory: { ...laboratory, statusReason: role === "OWNER" ? laboratory.statusReason : null } })),

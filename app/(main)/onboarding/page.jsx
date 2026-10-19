@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User, Stethoscope, Loader2 } from "lucide-react";
+import { User, Stethoscope, FlaskConical, Pill, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -95,24 +95,22 @@ export default function OnboardingPage() {
   // Role selection screen
   if (step === "choose-role") {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card
-          className="border-emerald-900/20 transition-all"
-        >
-          <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="h-full border-emerald-900/20 transition-all">
+          <CardContent className="flex flex-1 flex-col items-center pt-6 pb-6 text-center">
             <div className="p-4 bg-emerald-900/20 rounded-full mb-4">
               <User className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="text-xl font-semibold text-foreground mb-2">
               Join as a Patient
             </CardTitle>
-            <CardDescription className="mb-4">
+            <CardDescription className="mb-4 flex-1">
               Book appointments, consult with doctors, and manage your
               healthcare journey
             </CardDescription>
             <Button
               type="button"
-              className="w-full mt-2 bg-primary hover:bg-primary/90"
+              className="mt-auto w-full bg-primary hover:bg-primary/90"
               disabled={loading}
               onClick={handlePatientSelection}
             >
@@ -127,37 +125,63 @@ export default function OnboardingPage() {
             </Button>
           </CardContent>
         </Card>
-        <Card className="border-emerald-900/20 transition-all">
-          <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
-            <div className="p-4 bg-emerald-900/20 rounded-full mb-4"><Stethoscope className="h-8 w-8 text-primary" /></div>
-            <CardTitle className="text-xl font-semibold text-foreground mb-2">Laboratory or Pharmacy partner</CardTitle>
-            <CardDescription className="mb-4">Apply for an organization workspace. Admin approval is required before partner operations are enabled.</CardDescription>
-            <Button render={<Link href="/laboratory/workspace" />} variant="outline" className="w-full mt-2">Laboratory onboarding</Button>
-            <Button render={<Link href="/pharmacy/workspace" />} variant="outline" className="w-full mt-2">Chemist / Pharmacy onboarding</Button>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="border-emerald-900/20 transition-all"
-        >
-          <CardContent className="pt-6 pb-6 flex flex-col items-center text-center">
+        <Card className="h-full border-emerald-900/20 transition-all">
+          <CardContent className="flex flex-1 flex-col items-center pt-6 pb-6 text-center">
             <div className="p-4 bg-emerald-900/20 rounded-full mb-4">
               <Stethoscope className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="text-xl font-semibold text-foreground mb-2">
               Join as a Doctor
             </CardTitle>
-            <CardDescription className="mb-4">
+            <CardDescription className="mb-4 flex-1">
               Create your professional profile, set your availability, and
               provide consultations
             </CardDescription>
             <Button
               type="button"
-              className="w-full mt-2 bg-primary hover:bg-primary/90"
+              className="mt-auto w-full bg-primary hover:bg-primary/90"
               disabled={loading}
               onClick={() => setStep("doctor-form")}
             >
               Continue as Doctor
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="h-full border-emerald-900/20 transition-all">
+          <CardContent className="flex flex-1 flex-col items-center pt-6 pb-6 text-center">
+            <div className="p-4 bg-emerald-900/20 rounded-full mb-4">
+              <FlaskConical className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle className="text-xl font-semibold text-foreground mb-2">
+              Laboratory Partner
+            </CardTitle>
+            <CardDescription className="mb-4 flex-1">
+              Apply for an organization workspace. Admin approval is required before partner operations are enabled.
+            </CardDescription>
+            <Button
+              render={<Link href="/laboratory/workspace" />}
+              className="mt-auto w-full bg-primary hover:bg-primary/90"
+            >
+              Laboratory onboarding
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="h-full border-emerald-900/20 transition-all">
+          <CardContent className="flex flex-1 flex-col items-center pt-6 pb-6 text-center">
+            <div className="p-4 bg-emerald-900/20 rounded-full mb-4">
+              <Pill className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle className="text-xl font-semibold text-foreground mb-2">
+              Pharmacy Partner
+            </CardTitle>
+            <CardDescription className="mb-4 flex-1">
+              Apply for an organization workspace. Admin approval is required before partner operations are enabled.
+            </CardDescription>
+            <Button
+              render={<Link href="/pharmacy/workspace" />}
+              className="mt-auto w-full bg-primary hover:bg-primary/90"
+            >
+              Chemist / Pharmacy onboarding
             </Button>
           </CardContent>
         </Card>
