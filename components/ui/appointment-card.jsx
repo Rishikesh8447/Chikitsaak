@@ -658,7 +658,7 @@ export function AppointmentCard({
       </Dialog>
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle className="text-foreground font-bold">Reschedule appointment?</DialogTitle><DialogDescription>Select a new available 30-minute slot. Your credits will not change.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground font-bold">Reschedule appointment?</DialogTitle><DialogDescription>Select a new available 20-minute slot. Your credits will not change.</DialogDescription></DialogHeader>
           <div className="max-h-80 space-y-4 overflow-y-auto py-2">
             {slotsLoading ? <p className="text-xs text-muted-foreground">Loading available slots...</p> : slotsData?.days?.map((day) => <div key={day.date}><h4 className="mb-2 text-xs font-semibold text-foreground">{day.displayDate}</h4><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{day.slots.map((slot) => <Button key={slot.startTime} variant={selectedRescheduleSlot?.startTime === slot.startTime ? "default" : "outline"} onClick={() => setSelectedRescheduleSlot(slot)}>{formatLocalSlotRange(slot.startTime, slot.endTime)}</Button>)}</div></div>)}
             {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && <p className="text-xs text-muted-foreground">No available appointments for these dates.</p>}

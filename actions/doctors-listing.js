@@ -79,8 +79,8 @@ export async function searchDoctors({ query = "", specialty = "", city = "", sta
       start.setHours(window.startTime.getHours(), window.startTime.getMinutes(), 0, 0);
       const end = new Date(firstDay);
       end.setHours(window.endTime.getHours(), window.endTime.getMinutes(), 0, 0);
-      for (let slotStart = start; slotStart < end; slotStart = addMinutes(slotStart, 30)) {
-        const slotEnd = addMinutes(slotStart, 30);
+      for (let slotStart = start; slotStart < end; slotStart = addMinutes(slotStart, 20)) {
+        const slotEnd = addMinutes(slotStart, 20);
         if (slotStart <= now || slotEnd > end) continue;
         if (!appointments.some((appointment) => appointment.doctorId === doctor.id && appointment.startTime < slotEnd && appointment.endTime > slotStart)) return true;
       }

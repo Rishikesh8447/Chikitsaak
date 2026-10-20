@@ -6,6 +6,7 @@ import "./globals.css";
 import Header from "@/components/header"
 import { checkUser } from "@/lib/checkUser";
 import { Toaster } from "sonner";
+import ServiceWorkerRegistration from "@/components/service-worker-registration";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,6 +21,11 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "Chikitsaak-Doctors Appointment App",
   description: "Connect with Doctors anytime,anywhere",
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport = {
+  themeColor: "#176b63",
 };
 
 export default async function RootLayout({ children }) {
@@ -38,6 +44,7 @@ export default async function RootLayout({ children }) {
           >
 
             <Header user={user} />
+            <ServiceWorkerRegistration />
             <CreditSync user={user} />
             <div className="min-h-screen">
               {children}

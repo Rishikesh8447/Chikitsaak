@@ -11,7 +11,7 @@ async function loadBookingAction({ patientCredits = 2, userId = "clerk-patient",
   const appointmentTime = await import("../lib/appointment-time.mjs");
   const appointmentDate = "2099-06-01";
   const startTime = new Date(`${appointmentDate}T08:00:00.000Z`);
-  const endTime = new Date(`${appointmentDate}T08:30:00.000Z`);
+  const endTime = new Date(`${appointmentDate}T08:20:00.000Z`);
   const state = {
     users: [
       { id: "patient-1", clerkUserId: "clerk-patient", role: "PATIENT", credits: patientCredits },
@@ -244,7 +244,7 @@ test("concurrent bookings cannot spend the same two patient credits twice", asyn
       ["doctorId", "doctor-1"], ["startTime", slotStart.toISOString()], ["endTime", slotEnd.toISOString()],
       ["aiSummary", null], ["aiSpecialtySuggestion", null],
     ]);
-    const results = await Promise.all([bookAppointment(form()), bookAppointment(form(new Date(endTime), new Date(endTime.getTime() + 30 * 60 * 1000)))]);
+    const results = await Promise.all([bookAppointment(form()), bookAppointment(form(new Date(endTime), new Date(endTime.getTime() + 20 * 60 * 1000)))]);
     assert.equal(results.filter((result) => result.success).length, 1, JSON.stringify({ results, appointments: state.appointments, queries: state.conflictQueries }));
     assert.equal(results.filter((result) => result.code === "INSUFFICIENT_CREDITS").length, 1);
     assert.equal(state.users.find((user) => user.id === "patient-1").credits, 0);

@@ -6,9 +6,9 @@ const { cwd } = require("node:process");
 
 const sourcePromise = readFile(join(cwd(), "actions", "appointments.js"), "utf8");
 const initialStart = new Date("2035-06-01T10:00:00.000Z");
-const initialEnd = new Date("2035-06-01T10:30:00.000Z");
+const initialEnd = new Date("2035-06-01T10:20:00.000Z");
 const newStart = new Date("2035-06-01T11:00:00.000Z");
-const newEnd = new Date("2035-06-01T11:30:00.000Z");
+const newEnd = new Date("2035-06-01T11:20:00.000Z");
 
 async function loadAction({ verificationStatus = "VERIFIED", ownerId = "patient-1", available = true } = {}) {
   const source = await sourcePromise;

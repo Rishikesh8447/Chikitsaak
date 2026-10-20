@@ -57,7 +57,7 @@ export async function bookAppointment(formData) {
       throw createBookingError("INVALID_APPOINTMENT", "Choose an appointment time in the future.");
     }
     const durationMinutes = (endTime - startTime) / 60000;
-    if (durationMinutes !== 30) throw createBookingError("INVALID_APPOINTMENT", "Appointments must be 30 minutes. Please select a listed slot.");
+    if (durationMinutes !== 20) throw createBookingError("INVALID_APPOINTMENT", "Appointments must be 20 minutes. Please select a listed slot.");
     const appointment = await db.$transaction(async (tx) => {
       const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" } });
       const doctor = await tx.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
@@ -297,8 +297,8 @@ export async function getAvailableTimeSlots(doctorId, startDate) {
       start.setHours(new Date(window.startTime).getHours(), new Date(window.startTime).getMinutes(), 0, 0);
       const end = new Date(day);
       end.setHours(new Date(window.endTime).getHours(), new Date(window.endTime).getMinutes(), 0, 0);
-      for (let current = start; current < end; current = addMinutes(current, 30)) {
-        const next = addMinutes(current, 30);
+      for (let current = start; current < end; current = addMinutes(current, 20)) {
+        const next = addMinutes(current, 20);
         if (next > end || current <= now) continue;
         const occupied = appointments.some((appointment) => new Date(appointment.startTime) < next && new Date(appointment.endTime) > current);
         if (!occupied) slots.push({ startTime: current.toISOString(), endTime: next.toISOString(), formatted: `${format(current, "h:mm a")} - ${format(next, "h:mm a")}`, day: format(day, "EEEE, MMMM d") });
@@ -317,7 +317,7 @@ export async function rescheduleAppointment(formData) {
   const endValue = formData.get("endTime");
   const startTime = new Date(startValue);
   const endTime = new Date(endValue);
-  if (typeof appointmentId !== "string" || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime || (endTime - startTime) !== 30 * 60 * 1000 || startTime <= new Date()) throw new Error("Invalid rescheduling details");
+  if (typeof appointmentId !== "string" || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime || (endTime - startTime) !== 20 * 60 * 1000 || startTime <= new Date()) throw new Error("Invalid rescheduling details");
   const result = await db.$transaction(async (tx) => {
     const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" } });
     const appointment = await tx.appointment.findUnique({ where: { id: appointmentId } });

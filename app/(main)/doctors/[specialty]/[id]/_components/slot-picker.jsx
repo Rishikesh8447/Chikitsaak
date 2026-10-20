@@ -29,7 +29,7 @@ export function SlotPicker({ days, onSelectSlot }) {
 
   return (
     <section aria-label="Choose appointment time" className="space-y-6">
-      <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground"><span className="font-medium">Consultation cost: 2 credits</span><span className="ml-2 text-muted-foreground">Choose a day and a 30-minute time.</span></div>
+      <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground"><span className="font-medium">Consultation cost: 2 credits</span><span className="ml-2 text-muted-foreground">Choose a day and a 20-minute time.</span></div>
       <Tabs
         defaultValue={activeTab}
         onValueChange={setActiveTab}
