@@ -11,7 +11,7 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { User, Stethoscope, FlaskConical, Pill, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -158,12 +158,9 @@ export default function OnboardingPage() {
             <CardDescription className="mb-4 min-w-0 max-w-full flex-1 break-words">
               Apply for an organization workspace. Admin approval is required before partner operations are enabled.
             </CardDescription>
-            <Button
-              render={<Link href="/laboratory/workspace" />}
-              className="mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary/90"
-            >
+            <Link href="/laboratory/workspace" className={buttonVariants({ className: "mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary/90" })}>
               Laboratory onboarding
-            </Button>
+            </Link>
           </CardContent>
         </Card>
         <Card className="h-full min-w-0 border-emerald-900/20 transition-all">
@@ -177,12 +174,9 @@ export default function OnboardingPage() {
             <CardDescription className="mb-4 min-w-0 max-w-full flex-1 break-words">
               Apply for an organization workspace. Admin approval is required before partner operations are enabled.
             </CardDescription>
-            <Button
-              render={<Link href="/pharmacy/workspace" />}
-              className="mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary/90"
-            >
+            <Link href="/pharmacy/workspace" className={buttonVariants({ className: "mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary/90" })}>
               Chemist / Pharmacy onboarding
-            </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

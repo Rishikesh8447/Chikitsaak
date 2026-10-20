@@ -28,7 +28,8 @@ test("onboarding role cards share height, content spacing, and button styling", 
   const source = await readFile(pagePath, "utf8");
   assert.equal((source.match(/className="h-full min-w-0 border-emerald-900\/20 transition-all"/g) || []).length, 4);
   assert.equal((source.match(/className="flex flex-1 flex-col items-center pt-6 pb-6 text-center"/g) || []).length, 4);
-  assert.equal((source.match(/className="mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary\/90"/g) || []).length, 4);
+  assert.equal((source.match(/className="mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary\/90"/g) || []).length, 2);
+  assert.equal((source.match(/className=\{buttonVariants\(\{ className: "mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary\/90" \}\)\}/g) || []).length, 2);
   assert.equal((source.match(/className="mb-2 min-w-0 max-w-full break-words text-xl font-semibold text-foreground"/g) || []).length, 4);
   assert.equal((source.match(/className="mb-4 min-w-0 max-w-full flex-1 break-words"/g) || []).length, 4);
 });

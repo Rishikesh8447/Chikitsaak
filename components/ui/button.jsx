@@ -41,18 +41,24 @@ const buttonVariants = cva(
 )
 
 function Button({
-    className,
+  className,
   variant = "default",
   size = "default",
-  asChild = false,
+  asChild,
+  nativeButton,
+  children,
   ...props
 }) {
   return (
     <ButtonPrimitive
-       data-slot="button"
-  
-  className={cn(buttonVariants({ variant, size, className }))}
-  {...props} />
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      nativeButton={asChild ? false : nativeButton}
+      {...(asChild ? { render: children, role: "link" } : {})}
+      {...props}
+    >
+      {asChild ? undefined : children}
+    </ButtonPrimitive>
   );
 }
 

@@ -1,6 +1,6 @@
 export default function manifest() {
   return {
-    name: "Chikitsaak — Doctor Appointments",
+    name: "Chikitsaak — Care, Connected",
     short_name: "Chikitsaak",
     description: "Connect with doctors and manage your care with Chikitsaak.",
     start_url: "/",
