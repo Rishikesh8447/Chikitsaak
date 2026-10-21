@@ -53,9 +53,9 @@ const Header = async ({ user: initialUser } = {}) => {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/90 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
-      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" aria-label="Chikitsaak home" className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="relative block h-10 w-40 overflow-hidden rounded-lg bg-white px-1 ring-1 ring-border sm:h-12 sm:w-52 lg:h-14 lg:w-56">
+      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
+        <Link href="/" aria-label="Chikitsaak home" className="flex min-w-0 shrink items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span className="relative block h-9 w-28 shrink-0 overflow-hidden rounded-lg bg-white px-1 ring-1 ring-border min-[375px]:w-32 sm:h-12 sm:w-52 lg:h-14 lg:w-56">
             <Image src="/chikitsaak-full-logo.png" alt="" fill sizes="(min-width: 1024px) 224px, (min-width: 640px) 208px, 160px" className="object-contain p-1" priority />
           </span>
         </Link>
@@ -71,7 +71,7 @@ const Header = async ({ user: initialUser } = {}) => {
           </Show>
         </nav>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Show when="signed-in">
             {user?.role !== "ADMIN" && !isPartner && user && <Link href="/credits" aria-label={`Open credit balance: ${user.credits} credits`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 sm:px-3"><CreditCard className="size-3.5" /><span>{user.credits}</span><span className="hidden sm:inline">credits</span></Link>}
             {user && <NotificationCenter />}
