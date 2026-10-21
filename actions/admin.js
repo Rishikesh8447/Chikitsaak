@@ -122,7 +122,11 @@ export async function verifyAdmin() {
 
     return user?.role === "ADMIN";
   } catch (error) {
-    console.error("Failed to verify admin.");
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    const errorCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "Unavailable";
+    console.error("Failed to verify admin.", { errorName, errorCode });
     return false;
   }
 }

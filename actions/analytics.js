@@ -75,8 +75,12 @@ export async function getAdminAnalytics(range) {
       where: { clerkUserId: userId },
       select: { id: true, role: true },
     });
-  } catch {
-    console.error("Failed to authorize admin analytics.");
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    const errorCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "Unavailable";
+    console.error("Failed to authorize admin analytics.", { errorName, errorCode });
     throw new Error("Failed to authorize analytics access. Please try again.");
   }
   if (!user) throw new Error("User not found");
