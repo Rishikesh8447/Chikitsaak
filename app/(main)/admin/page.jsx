@@ -42,7 +42,7 @@ export default async function AdminPage({ searchParams }) {
         <PendingPayouts payouts={pendingPayoutsData.payouts || []} />
       </TabsContent>
 
-      <TabsContent value="analytics" className="border-none p-0"><AnalyticsPanel title="Admin analytics" analytics={analyticsData} basePath="/admin" /></TabsContent>
+      <TabsContent value="analytics" className="border-none p-0"><AnalyticsPanel title="Admin analytics" analytics={analyticsData} basePath="/admin" admin /></TabsContent>
     </>
   );
 }
