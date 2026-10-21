@@ -55,11 +55,9 @@ const Header = async ({ user: initialUser } = {}) => {
     <header className="sticky top-0 z-40 border-b border-border/90 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
       <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <Link href="/" aria-label="Chikitsaak home" className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="relative block size-9 overflow-hidden rounded-xl bg-white ring-1 ring-border sm:size-10">
-            <Image src="/LightModelogo.png" alt="" fill sizes="40px" className="object-cover dark:hidden" priority />
-            <Image src="/DarkModeLogo.png" alt="" fill sizes="40px" className="hidden object-cover dark:block" priority />
+          <span className="relative block h-10 w-40 overflow-hidden rounded-lg bg-white px-1 ring-1 ring-border sm:h-12 sm:w-52 lg:h-14 lg:w-56">
+            <Image src="/chikitsaak-full-logo.png" alt="" fill sizes="(min-width: 1024px) 224px, (min-width: 640px) 208px, 160px" className="object-contain p-1" priority />
           </span>
-          <span className="hidden leading-tight sm:block"><span className="block text-[15px] font-bold tracking-tight text-foreground">Chikitsaak</span><span className="block text-[10px] font-medium tracking-wide text-muted-foreground">CARE, CONNECTED</span></span>
         </Link>
 
         <nav aria-label="Primary" className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 xl:flex">
