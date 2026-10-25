@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "db:seed": "node prisma/seed.js",
+    "db:migration-preflight": "node scripts/migration-preflight.cjs",
     "postinstall": "prisma generate",
     "lint": "eslint",
     "test:e2e": "playwright test",

@@ -16,7 +16,7 @@ model User {
   role                   UserRole            @default(UNASSIGNED)
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
-  credits                Int                 @default(2)
+  consultationPriceRupees Int?
   experience             Int?
   credentialUrl          String?
   description            String?
@@ -32,7 +32,6 @@ model User {
   doctorAppointments     Appointment[]       @relation("DoctorAppointments")
   patientAppointments    Appointment[]       @relation("PatientAppointments")
   availabilities         Availability[]
-  transactions           CreditTransaction[]
   notifications          Notification[]
   payouts                Payout[]
   prescriptionsAsDoctor  Prescription[]      @relation("PrescriptionDoctor")
@@ -46,6 +45,8 @@ model User {
   laboratoryAuditEvents  LaboratoryAuditEvent[]
   pharmacyMemberships    PharmacyMembership[]
   pharmacyAuditEvents    PharmacyAuditEvent[]
+  appointmentRefundDecisions AppointmentRefundDecision[]
+  cashCollections         AppointmentCashCollection[]
 
   @@index([city])
   @@index([state])
@@ -89,39 +90,121 @@ model Appointment {
   prescription          Prescription?
   review                Review?
   labOrders             LabOrder[]
+  payment               AppointmentPayment?
+  checkoutExpiresAt     DateTime?
+  consultationMode      AppointmentMode       @default(ONLINE)
 
   @@index([status, startTime])
   @@index([doctorId, startTime])
+  @@index([doctorId, checkoutExpiresAt])
 }
 
-model CreditTransaction {
-  id            String          @id @default(uuid())
-  userId        String
-  amount        Int
-  type          TransactionType
-  packageId     String?
-  createdAt     DateTime        @default(now())
-  allocationKey String?         @unique
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+model AppointmentPayment {
+  id                    String                   @id @default(uuid())
+  appointmentId         String                   @unique
+  amountRupees          Int
+  amountPaise           Int
+  currency              String                   @default("INR")
+  status                AppointmentPaymentStatus @default(PENDING)
+  method                AppointmentPaymentMethod  @default(ONLINE)
+  orderStatus           PaymentOrderStatus       @default(CREATED)
+  refundStatus          PaymentRefundStatus      @default(NOT_REQUIRED)
+  razorpayOrderId       String?                  @unique
+  razorpayPaymentId     String?                  @unique
+  verifiedAt            DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  appointment           Appointment              @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  webhookEvents         RazorpayWebhookEvent[]
+  refundDecision        AppointmentRefundDecision?
+  cashCollection        AppointmentCashCollection?
+  payoutAllocations     PayoutPaymentAllocation[]
+
+  @@index([status, createdAt])
+  @@index([refundStatus, createdAt])
+}
+
+model RazorpayWebhookEvent {
+  id                    String                    @id
+  eventType             String
+  appointmentPaymentId  String?
+  razorpayPaymentId     String?
+  razorpayOrderId       String?
+  amountPaise           Int?
+  currency              String?
+  status                RazorpayWebhookEventStatus @default(RECEIVED)
+  receivedAt            DateTime                  @default(now())
+  processedAt           DateTime?
+  appointmentPayment    AppointmentPayment?       @relation(fields: [appointmentPaymentId], references: [id], onDelete: Restrict)
+
+  @@index([appointmentPaymentId, status])
+  @@index([razorpayPaymentId])
+  @@index([razorpayOrderId])
+}
+
+model AppointmentRefundDecision {
+  id          String               @id @default(uuid())
+  paymentId   String               @unique
+  adminUserId String
+  decision    RefundReviewDecision
+  note        String
+  createdAt   DateTime             @default(now())
+  payment     AppointmentPayment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  admin       User                 @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([adminUserId, createdAt])
+}
+
+model AppointmentCashCollection {
+  paymentId      String             @id
+  collectorUserId String
+  collectedAt    DateTime           @default(now())
+  payment        AppointmentPayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  collector      User               @relation(fields: [collectorUserId], references: [id], onDelete: Restrict)
+
+  @@index([collectorUserId, collectedAt])
 }
 
 model Payout {
   id          String       @id @default(uuid())
   doctorId    String
-  amount      Int
   status      PayoutStatus @default(PROCESSING)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-  credits     Int          @default(0)
-  platformFee Int          @default(0)
-  netAmount   Int          @default(0)
-  paypalEmail String?
   processedAt DateTime?
   processedBy String?
+  currency    String?
+  amountPaise BigInt?
+  platformFeePaise BigInt?
+  netAmountPaise BigInt?
+  requestKey String? @unique
+  transferReference String? @unique
+  reviewRequiredAt DateTime?
+  reviewReason String?
   doctor      User         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  allocations PayoutPaymentAllocation[]
 
   @@index([doctorId])
   @@index([status])
+  @@index([doctorId, status])
+}
+
+model PayoutPaymentAllocation {
+  id                  String                  @id @default(uuid())
+  payoutId            String
+  appointmentPaymentId String
+  activePaymentId     String?                 @unique
+  amountPaise         BigInt
+  status              PayoutAllocationStatus  @default(RESERVED)
+  createdAt           DateTime                @default(now())
+  releasedAt          DateTime?
+  paidAt              DateTime?
+  payout              Payout                  @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+  appointmentPayment  AppointmentPayment      @relation(fields: [appointmentPaymentId], references: [id], onDelete: Restrict)
+
+  @@index([payoutId, status])
+  @@index([appointmentPaymentId, createdAt])
+  @@unique([payoutId, appointmentPaymentId])
 }
 
 model Notification {
@@ -453,6 +536,7 @@ enum SlotStatus {
 }
 
 enum AppointmentStatus {
+  PAYMENT_PENDING
   SCHEDULED
   COMPLETED
   CANCELLED
@@ -461,11 +545,51 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
-enum TransactionType {
-  CREDIT_PURCHASE
-  APPOINTMENT_DEDUCTION
-  ADMIN_ADJUSTMENT
-  APPOINTMENT_REFUND
+enum AppointmentPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CASH_DUE
+  CANCELLED
+}
+
+enum AppointmentMode {
+  ONLINE
+  OFFLINE
+}
+
+enum AppointmentPaymentMethod {
+  ONLINE
+  CASH
+  UPI_QR
+}
+
+enum PaymentOrderStatus {
+  CREATED
+  PAID
+  EXPIRED
+  NOT_APPLICABLE
+}
+
+enum PaymentRefundStatus {
+  NOT_REQUIRED
+  REVIEW_REQUIRED
+  APPROVED
+  REFUNDED
+  REJECTED
+}
+
+enum RazorpayWebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  REVIEW_REQUIRED
+}
+
+enum RefundReviewDecision {
+  APPROVED
+  REJECTED
 }
 
 enum NotificationType {
@@ -477,7 +601,6 @@ enum NotificationType {
   NO_SHOW
   DOCTOR_VERIFICATION
   PAYOUT_STATUS
-  CREDIT_TRANSACTION
   PRESCRIPTION_AVAILABLE
   LAB_ORDER_UPDATE
 }
@@ -492,6 +615,12 @@ enum PayoutStatus {
   COMPLETED
   FAILED
   PROCESSED
+}
+
+enum PayoutAllocationStatus {
+  RESERVED
+  RELEASED
+  PAID
 }
 
 enum LaboratoryStatus {
