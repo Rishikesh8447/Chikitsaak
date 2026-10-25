@@ -71,7 +71,8 @@ try {
     }
 
     if (-not (Test-Path -LiteralPath '.env.local' -PathType Leaf)) { throw '.env.local is missing.' }
-    $targetCheck = & node -e 'const fs=require("node:fs"); const dotenv=require("dotenv"); const {validateGreenFrogTarget}=require("./scripts/green-frog-schema-verification.cjs"); const target=validateGreenFrogTarget(dotenv.parse(fs.readFileSync(".env.local","utf8")).DATABASE_URL); if(!target.ok){ console.error(target.reason); process.exit(2); } process.stdout.write("Green Frog target validated.");'
+    $targetValidationCode = "const fs=require('node:fs'); const dotenv=require('dotenv'); const {validateGreenFrogTarget}=require('./scripts/green-frog-schema-verification.cjs'); const target=validateGreenFrogTarget(dotenv.parse(fs.readFileSync('.env.local','utf8')).DATABASE_URL); if(!target.ok){ console.error(target.reason); process.exit(2); } process.stdout.write('Green Frog target validated.');"
+    $targetCheck = & node -e $targetValidationCode
     if ($LASTEXITCODE -ne 0) { throw 'Configured DATABASE_URL is not the approved Green Frog target.' }
     Write-Host $targetCheck
 
