@@ -71,9 +71,32 @@ try {
     }
 
     if (-not (Test-Path -LiteralPath '.env.local' -PathType Leaf)) { throw '.env.local is missing.' }
-    $targetValidationCode = "const fs=require('node:fs'); const dotenv=require('dotenv'); const {validateGreenFrogTarget}=require('./scripts/green-frog-schema-verification.cjs'); const target=validateGreenFrogTarget(dotenv.parse(fs.readFileSync('.env.local','utf8')).DATABASE_URL); if(!target.ok){ console.error(target.reason); process.exit(2); } process.stdout.write('Green Frog target validated.');"
-    $targetCheck = & node -e $targetValidationCode
-    if ($LASTEXITCODE -ne 0) { throw 'Configured DATABASE_URL is not the approved Green Frog target.' }
+    $targetValidationPath = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName() + '.cjs')
+    $targetValidationCode = @'
+const fs = require('node:fs');
+const dotenv = require('dotenv');
+const path = require('node:path');
+const { validateGreenFrogTarget } = require(path.join(process.argv[2], 'scripts', 'green-frog-schema-verification.cjs'));
+const envPath = process.argv[3];
+const target = validateGreenFrogTarget(dotenv.parse(fs.readFileSync(envPath, 'utf8')).DATABASE_URL);
+if (!target.ok) {
+  console.error(target.reason);
+  process.exit(2);
+}
+process.stdout.write('Green Frog target validated.');
+'@
+    try {
+        [IO.File]::WriteAllText($targetValidationPath, $targetValidationCode, (New-Object System.Text.UTF8Encoding($false)))
+        $targetCheck = & node $targetValidationPath $repoRoot (Join-Path $repoRoot '.env.local')
+        $targetValidationExitCode = $LASTEXITCODE
+    }
+    finally {
+        if (Test-Path -LiteralPath $targetValidationPath) { Remove-Item -LiteralPath $targetValidationPath -Force }
+    }
+    if ($targetValidationExitCode -eq 2) { throw 'Configured DATABASE_URL is not the approved Green Frog target.' }
+    if ($targetValidationExitCode -ne 0) {
+        throw "Target validation could not run (node exit code $targetValidationExitCode). This is a script-execution error and does not indicate a wrong database target."
+    }
     Write-Host $targetCheck
 
     & npm.cmd run db:migration-preflight -- --expect reconciled --database $expectedDatabase --host $expectedHost
@@ -121,6 +144,7 @@ try {
     Write-Host "Included directories: $($releaseMigrations -join ', ')"
     Write-Host "Cleanup remains excluded: $cleanupMigration"
     Write-Host 'No migration command was run.'
+    Write-Host 'Before any apply step, verify Green Frog schema equivalence and pause all writers: preview deployments, cron/background workers, and Razorpay test webhooks/retries.'
 }
 finally {
     Pop-Location
