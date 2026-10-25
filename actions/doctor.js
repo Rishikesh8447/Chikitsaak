@@ -6,6 +6,20 @@ import { revalidatePath } from "next/cache";
 import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";
 import { cancelAppointmentInTransaction, CANCELLATION_ERRORS } from "@/lib/appointment-cancellation.mjs";
+import { parseConsultationPriceRupees } from "@/lib/razorpay.mjs";
+
+export async function updateConsultationPrice(formData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  const consultationPriceRupees = parseConsultationPriceRupees(formData.get("consultationPriceRupees"));
+  if (!consultationPriceRupees) return { success: false, message: "Enter a whole rupee amount from ₹1 to ₹100,000." };
+  const doctor = await db.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true } });
+  if (!doctor) throw new Error("Not authorized");
+  await db.user.update({ where: { id: doctor.id, role: "DOCTOR" }, data: { consultationPriceRupees } });
+  revalidatePath("/doctor");
+  revalidatePath("/doctors");
+  return { success: true, consultationPriceRupees };
+}
 
 /**
  * Set doctor's availability slots
@@ -58,7 +72,7 @@ export async function setAvailabilitySlots(formData) {
         return (slot.dayOfWeek === null || dayOfWeek === null || slot.dayOfWeek === dayOfWeek) && slotStart < endMinutes && slotEnd > startMinutes;
       });
       if (overlaps) throw new Error("This availability period overlaps an existing period");
-      const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] }, startTime: { lt: end }, endTime: { gt: start } } });
+      const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, OR: [{ status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } }], startTime: { lt: end }, endTime: { gt: start } } });
       const coversAppointment = (appointment) => {
         const appointmentStart = new Date(appointment.startTime);
         const appointmentEnd = new Date(appointment.endTime);
@@ -152,6 +166,7 @@ export async function getDoctorAppointments() {
       include: {
         patient: { select: { id: true, name: true, email: true, imageUrl: true } },
         prescription: { include: { medicines: true } },
+        payment: { select: { method: true, status: true, amountRupees: true, cashCollection: { select: { collectedAt: true } } } },
       },
       orderBy: {
         startTime: "asc",
@@ -371,10 +386,24 @@ export async function updateAppointmentStatus(formData) {
   if (typeof appointmentId !== "string" || typeof nextStatus !== "string") throw new Error("Invalid status update");
   const actor = await db.user.findUnique({ where: { clerkUserId: userId } });
   if (!actor || actor.role !== "DOCTOR" || actor.verificationStatus !== "VERIFIED") throw new Error("Not authorized");
-  // Cancellation must use cancelAppointment so its refund and ledger work cannot be bypassed.
+  // Cancellation must use cancelAppointment so payment review cannot be bypassed.
   if (!["CONFIRMED", "IN_PROGRESS", "COMPLETED", "NO_SHOW"].includes(nextStatus)) throw new Error("Invalid appointment status");
-  const appointment = await db.appointment.findUnique({ where: { id: appointmentId, doctorId: actor.id } });
+  const appointment = await db.appointment.findUnique({
+    where: { id: appointmentId, doctorId: actor.id },
+    include: { payment: { select: { method: true, status: true, verifiedAt: true } } },
+  });
   if (!appointment || !canTransitionAppointment(appointment.status, nextStatus)) throw new Error("Invalid appointment status transition");
+  if (nextStatus === "CONFIRMED" && !appointment.payment) {
+    throw new Error("A payment record is required before confirming this appointment");
+  }
+  const requiresVerifiedPayment = appointment.consultationMode === "ONLINE" || appointment.payment?.method === "UPI_QR";
+  if (requiresVerifiedPayment && (
+    appointment.payment.status !== "PAID"
+    || !appointment.payment.verifiedAt
+    || (appointment.consultationMode === "ONLINE" && appointment.payment.method !== "ONLINE")
+  )) {
+    throw new Error("A verified payment is required before confirming this appointment");
+  }
   const now = new Date();
   if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && now < appointment.endTime) throw new Error("This appointment has not ended yet");
   if (nextStatus === "IN_PROGRESS" && (now < new Date(appointment.startTime) || now >= new Date(appointment.endTime))) throw new Error("Consultation can only start during the appointment time");
@@ -391,6 +420,52 @@ export async function updateAppointmentStatus(formData) {
   return { success: true, appointment: updated };
 }
 
+export async function recordCashAppointmentCollection(formData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  const appointmentId = formData.get("appointmentId");
+  if (typeof appointmentId !== "string" || !appointmentId) throw new Error("Invalid appointment");
+
+  const result = await db.$transaction(async (tx) => {
+    const collector = await tx.user.findUnique({
+      where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" },
+      select: { id: true },
+    });
+    if (!collector) throw new Error("Not authorized");
+
+    const appointment = await tx.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { payment: { include: { cashCollection: { select: { collectedAt: true } } } } },
+    });
+    if (!appointment || appointment.doctorId !== collector.id) throw new Error("Not authorized");
+    if (appointment.consultationMode !== "OFFLINE" || appointment.payment?.method !== "CASH") {
+      throw new Error("Only offline cash payments can be collected as cash");
+    }
+    if (!["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(appointment.status)) {
+      throw new Error("Cash collection is unavailable for this appointment");
+    }
+    if (appointment.payment.status === "PAID" && appointment.payment.cashCollection) {
+      return { alreadyCollected: true, collectedAt: appointment.payment.cashCollection.collectedAt };
+    }
+    if (appointment.payment.status !== "CASH_DUE") throw new Error("This appointment does not have cash due");
+
+    const collectedAt = new Date();
+    const changed = await tx.appointmentPayment.updateMany({
+      where: { id: appointment.payment.id, method: "CASH", status: "CASH_DUE" },
+      data: { status: "PAID", verifiedAt: collectedAt },
+    });
+    if (changed.count !== 1) throw new Error("Cash collection was already recorded or is unavailable");
+    await tx.appointmentCashCollection.create({
+      data: { paymentId: appointment.payment.id, collectorUserId: collector.id, collectedAt },
+    });
+    return { alreadyCollected: false, collectedAt };
+  }, { isolationLevel: "Serializable" });
+
+  revalidatePath("/doctor");
+  revalidatePath("/appointments");
+  return { success: true, ...result };
+}
+
 export async function removeAvailabilitySlot(formData) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -400,7 +475,7 @@ export async function removeAvailabilitySlot(formData) {
   await db.$transaction(async (tx) => {
     const slot = await tx.availability.findUnique({ where: { id: slotId, doctorId: doctor.id } });
     if (!slot) throw new Error("Availability period not found");
-    const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, select: { startTime: true, endTime: true } });
+    const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, OR: [{ status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } }] }, select: { startTime: true, endTime: true } });
     const slotStart = slot.startTime.getHours() * 60 + slot.startTime.getMinutes();
     const slotEnd = slot.endTime.getHours() * 60 + slot.endTime.getMinutes();
     const hasMatchingAppointment = appointments.some((appointment) => {

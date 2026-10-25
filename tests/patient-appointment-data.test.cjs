@@ -35,6 +35,9 @@ test("patient appointment records are scoped to the authenticated persisted pati
   assert.equal(query.select.aiSpecialtySuggestion, undefined);
   assert.equal(query.select.patientId, undefined);
   assert.deepEqual(query.select.review, { select: { id: true, rating: true, comment: true } });
+  assert.equal(query.select.payment.select.refundStatus, true);
+  assert.equal(query.select.checkoutExpiresAt, true);
+  assert.deepEqual(query.select.payment.select.cashCollection, { select: { collectedAt: true } });
   assert.equal(query.select.prescription, undefined);
 });
 

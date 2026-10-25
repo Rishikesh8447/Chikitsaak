@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Script from "next/script";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import {
   addAppointmentNotes,
   markAppointmentCompleted,
   updateAppointmentStatus,
+  recordCashAppointmentCollection,
 } from "@/actions/doctor";
 import { authorizeVideoCall, getAvailableTimeSlots, rescheduleAppointment } from "@/actions/appointments";
 import useFetch from "@/hooks/use-fetch";
@@ -39,6 +41,8 @@ import { PrescriptionForm } from "@/components/prescription-form";
 import { ReviewForm } from "@/components/review-form";
 import { AiDoctorNoteAssistant } from "@/components/ai-doctor-note-assistant";
 import { formatLocalSlotRange } from "@/lib/appointment-time.mjs";
+import { getAppointmentPaymentLabel } from "@/lib/appointment-payment-display.mjs";
+import { resumePendingAppointmentCheckout, verifyOnlineAppointmentPayment } from "@/actions/payments";
 
 export function AppointmentCard({
   appointment,
@@ -50,6 +54,10 @@ export function AppointmentCard({
   const [notes, setNotes] = useState(appointment.notes || "");
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [selectedRescheduleSlot, setSelectedRescheduleSlot] = useState(null);
+  const [resumeCheckoutLoading, setResumeCheckoutLoading] = useState(false);
+  const [razorpayReady, setRazorpayReady] = useState(false);
+  const [resumeStatusMessage, setResumeStatusMessage] = useState(null);
+  const handledStatusResult = useRef(null);
   const router = useRouter();
 
   // UseFetch hooks for server actions
@@ -74,6 +82,7 @@ export function AppointmentCard({
     data: completeData,
   } = useFetch(markAppointmentCompleted);
   const { loading: statusLoading, fn: submitStatus, data: statusData } = useFetch(updateAppointmentStatus);
+  const { loading: cashCollectionLoading, fn: submitCashCollection, data: cashCollectionData } = useFetch(recordCashAppointmentCollection);
   const { loading: slotsLoading, fn: loadSlots, data: slotsData } = useFetch(getAvailableTimeSlots);
   const { loading: rescheduleLoading, fn: submitReschedule, data: rescheduleData } = useFetch(rescheduleAppointment);
 
@@ -152,6 +161,82 @@ export function AppointmentCard({
     formData.append("appointmentId", appointment.id);
     formData.append("status", status);
     await submitStatus(formData);
+  };
+
+  const handleRecordCashCollection = async () => {
+    if (cashCollectionLoading || userRole !== "DOCTOR") return;
+    if (!window.confirm(`Record INR ${appointment.payment?.amountRupees} cash as collected?`)) return;
+    const formData = new FormData();
+    formData.append("appointmentId", appointment.id);
+    await submitCashCollection(formData);
+  };
+
+  const handleResumeCheckout = async () => {
+    if (resumeCheckoutLoading || !razorpayReady || userRole !== "PATIENT") return;
+    setResumeCheckoutLoading(true);
+    try {
+      const checkout = await resumePendingAppointmentCheckout(appointment.id);
+      if (!checkout?.success) {
+        if (["PAYMENT_PROCESSING", "REFUND_REVIEW_REQUIRED", "CHECKOUT_NOT_RESUMABLE"].includes(checkout?.code)) {
+          setResumeStatusMessage(checkout.message || "This checkout cannot be resumed safely.");
+        }
+        toast.error(checkout?.message || "This checkout cannot be resumed safely.");
+        router.refresh();
+        setResumeCheckoutLoading(false);
+        return;
+      }
+      const razorpay = new window.Razorpay({
+        key: checkout.keyId,
+        order_id: checkout.orderId,
+        amount: checkout.amount,
+        currency: checkout.currency,
+        name: "Chikitsaak",
+        description: checkout.method === "UPI_QR" ? "In-person doctor consultation" : "Online doctor consultation",
+        theme: { color: "#0f766e" },
+        ...(checkout.method === "UPI_QR" ? {
+          config: {
+            display: {
+              blocks: { upi: { name: "UPI / QR", instruments: [{ method: "upi" }] } },
+              sequence: ["block.upi"],
+              preferences: { show_default_blocks: false },
+            },
+          },
+        } : {}),
+        modal: { escape: true, ondismiss: () => setResumeCheckoutLoading(false) },
+        handler: async (response) => {
+          try {
+            const result = await verifyOnlineAppointmentPayment({
+              appointmentId: checkout.appointmentId,
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            });
+            if (result?.success) toast.success("Payment verified and appointment request booked.");
+            else {
+              if (["REFUND_REVIEW_REQUIRED", "PAYMENT_RECONCILIATION_PENDING"].includes(result?.code)) {
+                setResumeStatusMessage(result.message);
+              }
+              toast.error(result?.message || "Payment confirmation is pending. Do not pay again.");
+            }
+          } catch {
+            const message = "Payment was submitted, but confirmation is pending. Do not pay again.";
+            setResumeStatusMessage(message);
+            toast.error(message);
+          } finally {
+            setResumeCheckoutLoading(false);
+            router.refresh();
+          }
+        },
+      });
+      razorpay.on("payment.failed", () => {
+        toast.error("Payment was not completed. You can retry while the checkout hold is active.");
+        setResumeCheckoutLoading(false);
+      });
+      razorpay.open();
+    } catch {
+      toast.error("Payment status could not be checked. Do not pay again; try again later.");
+      setResumeCheckoutLoading(false);
+    }
   };
 
   const openReschedule = async () => {
@@ -235,11 +320,19 @@ export function AppointmentCard({
   }, [tokenData, appointment.id, router]);
 
   useEffect(() => {
-    if (statusData?.success) {
+    if (statusData?.success && handledStatusResult.current !== statusData) {
+      handledStatusResult.current = statusData;
       toast.success("Appointment status updated");
       if (refetchAppointments) refetchAppointments(); else router.refresh();
     }
   }, [statusData, refetchAppointments, router]);
+
+  useEffect(() => {
+    if (cashCollectionData?.success) {
+      toast.success(cashCollectionData.alreadyCollected ? "Cash was already recorded as collected" : "Cash collection recorded");
+      if (refetchAppointments) refetchAppointments(); else router.refresh();
+    }
+  }, [cashCollectionData, refetchAppointments, router]);
 
   useEffect(() => {
     if (rescheduleData?.success) {
@@ -274,6 +367,11 @@ export function AppointmentCard({
   return (
     <>
       <Card className="border-border transition-colors hover:border-primary/40 shadow-none">
+        {userRole === "PATIENT" && appointment.status === "PAYMENT_PENDING"
+          && appointment.payment?.status === "PENDING"
+          && ["ONLINE", "UPI_QR"].includes(appointment.payment.method) && (
+            <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" onReady={() => setRazorpayReady(true)} />
+          )}
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col md:flex-row justify-between gap-4">
             <div className="flex items-start gap-3.5">
@@ -324,7 +422,31 @@ export function AppointmentCard({
               >
                 {appointment.status}
               </Badge>
+              {appointment.payment && (
+                <div className="text-right text-xs text-muted-foreground">
+              <span>{resumeStatusMessage || getAppointmentPaymentLabel(appointment.payment, appointment)}</span>
+                  {appointment.payment.cashCollection?.collectedAt && (
+                    <span className="mt-0.5 block">Collected {formatDateTime(appointment.payment.cashCollection.collectedAt)}</span>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 mt-2 flex-wrap justify-end">
+                {userRole === "PATIENT" && appointment.status === "PAYMENT_PENDING"
+                  && appointment.payment?.status === "PENDING"
+                  && ["ONLINE", "UPI_QR"].includes(appointment.payment.method)
+                  && !resumeStatusMessage && (
+                    <Button size="sm" variant="outline" onClick={handleResumeCheckout} disabled={resumeCheckoutLoading || !razorpayReady}>
+                      {resumeCheckoutLoading ? "Checking payment..." : razorpayReady ? "Resume checkout" : "Loading secure checkout..."}
+                    </Button>
+                  )}
+                {userRole === "DOCTOR"
+                  && appointment.payment?.method === "CASH"
+                  && appointment.payment.status === "CASH_DUE"
+                  && ["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(appointment.status) && (
+                    <Button size="sm" variant="outline" onClick={handleRecordCashCollection} disabled={cashCollectionLoading}>
+                      {cashCollectionLoading ? "Recording..." : "Record cash collection"}
+                    </Button>
+                  )}
                 {canMarkCompleted() && (
                   <Button
                     size="sm"
@@ -482,7 +604,7 @@ export function AppointmentCard({
             {appointment.status === "SCHEDULED" && (
               <p className="text-sm text-muted-foreground">Waiting for doctor confirmation.</p>
             )}
-            {["CONFIRMED", "IN_PROGRESS"].includes(appointment.status) && (
+            {appointment.consultationMode !== "OFFLINE" && ["CONFIRMED", "IN_PROGRESS"].includes(appointment.status) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Video Consultation
@@ -658,7 +780,7 @@ export function AppointmentCard({
       </Dialog>
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle className="text-foreground font-bold">Reschedule appointment?</DialogTitle><DialogDescription>Select a new available 20-minute slot. Your credits will not change.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground font-bold">Reschedule appointment?</DialogTitle><DialogDescription>Select a new available 20-minute slot. Your appointment payment will not change.</DialogDescription></DialogHeader>
           <div className="max-h-80 space-y-4 overflow-y-auto py-2">
             {slotsLoading ? <p className="text-xs text-muted-foreground">Loading available slots...</p> : slotsData?.days?.map((day) => <div key={day.date}><h4 className="mb-2 text-xs font-semibold text-foreground">{day.displayDate}</h4><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{day.slots.map((slot) => <Button key={slot.startTime} variant={selectedRescheduleSlot?.startTime === slot.startTime ? "default" : "outline"} onClick={() => setSelectedRescheduleSlot(slot)}>{formatLocalSlotRange(slot.startTime, slot.endTime)}</Button>)}</div></div>)}
             {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && <p className="text-xs text-muted-foreground">No available appointments for these dates.</p>}

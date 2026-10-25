@@ -2,6 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
+import { measureServerTiming } from "@/lib/server-timing.mjs";
 
 const ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const RANGES = new Set([7, 30, 90, 365]);
@@ -39,9 +40,11 @@ function statusCounts(records) {
 }
 
 async function currentUser() {
-  const { userId } = await auth();
+  const { userId } = await measureServerTiming("analytics.auth", () => auth());
   if (!userId) throw new Error("Unauthorized");
-  const user = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true, verificationStatus: true } });
+  const user = await measureServerTiming("analytics.userLookup", () =>
+    db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true, verificationStatus: true } })
+  );
   if (!user) throw new Error("User not found");
   return user;
 }
@@ -50,9 +53,11 @@ export async function getDoctorAnalytics(range) {
   const user = await currentUser();
   if (user.role !== "DOCTOR" || user.verificationStatus !== "VERIFIED") throw new Error("Only verified doctors can access doctor analytics");
   const window = rangeWindow(range);
-  const where = { doctorId: user.id, startTime: { gte: window.from, lte: window.to } };
-  const appointments = await db.appointment.findMany({ where, select: { startTime: true, status: true, patientId: true } });
-  const completedPatients = await db.appointment.groupBy({ by: ["patientId"], where: { ...where, status: "COMPLETED" } });
+  const where = { doctorId: user.id, status: { not: "PAYMENT_PENDING" }, startTime: { gte: window.from, lte: window.to } };
+  const [appointments, completedPatients] = await Promise.all([
+    measureServerTiming("doctorAnalytics.appointmentsQuery", () => db.appointment.findMany({ where, select: { startTime: true, status: true, patientId: true } })),
+    measureServerTiming("doctorAnalytics.completedPatientsQuery", () => db.appointment.groupBy({ by: ["patientId"], where: { ...where, status: "COMPLETED" } })),
+  ]);
   return { range: window.days, metrics: { total: appointments.length, upcoming: appointments.filter((item) => ACTIVE_STATUSES.includes(item.status) && new Date(item.startTime) >= new Date()).length, completed: appointments.filter((item) => item.status === "COMPLETED").length, cancelled: appointments.filter((item) => item.status === "CANCELLED").length, noShow: appointments.filter((item) => item.status === "NO_SHOW").length, patientsTreated: completedPatients.length }, trend: trend(appointments, window.from, window.days), statuses: statusCounts(appointments) };
 }
 
@@ -60,7 +65,7 @@ export async function getPatientAnalytics(range) {
   const user = await currentUser();
   if (user.role !== "PATIENT") throw new Error("Only patients can access patient analytics");
   const window = rangeWindow(range);
-  const where = { patientId: user.id, startTime: { gte: window.from, lte: window.to } };
+  const where = { patientId: user.id, status: { not: "PAYMENT_PENDING" }, startTime: { gte: window.from, lte: window.to } };
   const appointments = await db.appointment.findMany({ where, select: { startTime: true, status: true, doctorId: true } });
   const doctors = await db.appointment.groupBy({ by: ["doctorId"], where });
   return { range: window.days, metrics: { total: appointments.length, upcoming: appointments.filter((item) => ACTIVE_STATUSES.includes(item.status) && new Date(item.startTime) >= new Date()).length, completed: appointments.filter((item) => item.status === "COMPLETED").length, cancelled: appointments.filter((item) => item.status === "CANCELLED").length, doctorsConsulted: new Set(appointments.filter((item) => item.status === "COMPLETED").map((item) => item.doctorId)).size }, trend: trend(appointments, window.from, window.days), statuses: statusCounts(appointments) };
@@ -87,7 +92,7 @@ export async function getAdminAnalytics(range) {
   if (user.role !== "ADMIN") throw new Error("Only admins can access admin analytics");
   try {
     const window = rangeWindow(range);
-    const appointmentWhere = { startTime: { gte: window.from, lte: window.to } };
+    const appointmentWhere = { status: { not: "PAYMENT_PENDING" }, startTime: { gte: window.from, lte: window.to } };
     const [users, appointments, verification, userGrowth] = await Promise.all([
       db.user.groupBy({ by: ["role"], _count: { _all: true } }),
       db.appointment.findMany({ where: appointmentWhere, select: { startTime: true, status: true } }),

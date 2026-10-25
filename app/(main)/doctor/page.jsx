@@ -10,9 +10,11 @@ import { DoctorEarnings } from "./_components/doctor-earnings";
 import { getDoctorAnalytics } from "@/actions/analytics";
 import { AnalyticsPanel } from "@/components/analytics-panel";
 import { PageHeader } from "@/components/page-header";
+import { ConsultationPriceForm } from "./_components/consultation-price-form";
+import { measureServerTiming } from "@/lib/server-timing.mjs";
 
 export default async function DoctorDashboardPage({ searchParams }) {
-  const user = await getCurrentUser();
+  const user = await measureServerTiming("doctorDashboard.currentUser", () => getCurrentUser());
   if (!user || user.role !== "DOCTOR") {
     redirect("/onboarding");
   }
@@ -23,11 +25,11 @@ export default async function DoctorDashboardPage({ searchParams }) {
   const params = await searchParams;
   const range = params?.range || 30;
   const [appointmentsData, availabilityData, earningsData, payoutsData, analyticsData] = await Promise.all([
-    getDoctorAppointments(),
-    getDoctorAvailability(),
-    getDoctorEarnings(),
-    getDoctorPayouts(),
-    getDoctorAnalytics(range),
+    measureServerTiming("doctorDashboard.appointments", () => getDoctorAppointments()),
+    measureServerTiming("doctorDashboard.availability", () => getDoctorAvailability()),
+    measureServerTiming("doctorDashboard.earnings", () => getDoctorEarnings()),
+    measureServerTiming("doctorDashboard.payouts", () => getDoctorPayouts()),
+    measureServerTiming("doctorDashboard.analytics", () => getDoctorAnalytics(range)),
   ]);
 
   const doctorAppointments = appointmentsData.appointments || [];
@@ -77,11 +79,12 @@ export default async function DoctorDashboardPage({ searchParams }) {
 
         <div className="min-w-0 w-full space-y-6">
           <PageHeader icon={<Stethoscope />} title={`Welcome, Dr. ${user.name || "Doctor"}`} description="Your practice overview and upcoming work." backLink={null} />
+          <ConsultationPriceForm priceRupees={user.consultationPriceRupees} />
           <section aria-label="Practice summary" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-lg border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Today&apos;s appointments</p><p className="mt-1 text-2xl font-semibold tracking-tight">{todayAppointments.length}</p></div>
             <div className="rounded-lg border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Upcoming</p><p className="mt-1 text-2xl font-semibold tracking-tight">{upcomingAppointments.length}</p></div>
             <div className="rounded-lg border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Completed</p><p className="mt-1 text-2xl font-semibold tracking-tight">{completedAppointments.length}</p></div>
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4"><p className="text-xs text-muted-foreground">Eligible credits</p><p className="mt-1 text-2xl font-semibold tracking-tight text-primary">{earningsData.earnings?.availableCredits || 0}</p></div>
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4"><p className="text-xs text-muted-foreground">Available collected earnings</p><p className="mt-1 text-2xl font-semibold tracking-tight text-primary">₹{(BigInt(earningsData.earnings?.paymentCollections?.availablePaise || "0") / 100n).toString()}.{String(BigInt(earningsData.earnings?.paymentCollections?.availablePaise || "0") % 100n).padStart(2, "0")}</p></div>
           </section>
 
           <TabsContent value="appointments" className="mt-0 border-none p-0">

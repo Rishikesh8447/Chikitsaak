@@ -26,7 +26,7 @@ async function expectHealthyPage(page, path) {
 }
 
 test.describe("public route smoke tests", () => {
-  for (const path of ["/", "/doctors", "/credits"]) {
+  for (const path of ["/", "/doctors"]) {
     test(`${path} loads without browser errors`, async ({ page }) => {
       await expectHealthyPage(page, path);
     });

@@ -63,7 +63,6 @@ test.describe("patient route accessibility", () => {
   });
 
   test("appointments accessibility", async ({ page }) => assertAccessibleRoute(page, "/appointments"));
-  test("credits accessibility", async ({ page }) => assertAccessibleRoute(page, "/credits"));
   test("medical records accessibility", async ({ page }) => assertAccessibleRoute(page, "/medical-records"));
 });
 

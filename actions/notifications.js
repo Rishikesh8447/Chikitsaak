@@ -3,20 +3,34 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { measureServerTiming } from "@/lib/server-timing.mjs";
 
 async function currentDatabaseUser() {
-  const { userId } = await auth();
+  const { userId } = await measureServerTiming("notifications.auth", () => auth());
   if (!userId) throw new Error("Unauthorized");
-  const user = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } });
+  const user = await measureServerTiming("notifications.userLookup", () =>
+    db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } })
+  );
   if (!user) throw new Error("User not found");
   return user;
 }
 
 export async function getMyNotifications() {
-  const user = await currentDatabaseUser();
+  const { userId } = await measureServerTiming("notifications.auth", () => auth());
+  if (!userId) throw new Error("Unauthorized");
+  const where = { user: { is: { clerkUserId: userId } } };
   const [notifications, unreadCount] = await Promise.all([
-    db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 50 }),
-    db.notification.count({ where: { userId: user.id, readAt: null } }),
+    measureServerTiming("notifications.listQuery", () =>
+      db.notification.findMany({
+        where,
+        select: { id: true, title: true, message: true, createdAt: true, readAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      })
+    ),
+    measureServerTiming("notifications.unreadCountQuery", () =>
+      db.notification.count({ where: { ...where, readAt: null } })
+    ),
   ]);
   return { notifications, unreadCount };
 }

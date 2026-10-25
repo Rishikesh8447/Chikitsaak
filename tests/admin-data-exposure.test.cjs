@@ -16,9 +16,9 @@ async function loadAdminDataActions({ doctorName = "Dr Example", experience = 5,
     verificationStatus: "PENDING", bloodGroup: "O+", allergies: "private", currentMedications: "private",
   };
   const fullPayout = {
-    id: "payout-1", amount: 20, status: "PROCESSING", createdAt: new Date("2026-01-02T00:00:00Z"),
-    credits: 2, platformFee: 4, netAmount: 16, paypalEmail: "doctor@example.com", processedBy: "private",
-    doctor: { ...fullDoctor, credits: 0 },
+    id: "payout-1", status: "PROCESSING", createdAt: new Date("2026-01-02T00:00:00Z"),
+    currency: "INR", amountPaise: 2000n, platformFeePaise: 0n, netAmountPaise: 2000n,
+    reviewRequiredAt: null, reviewReason: null, doctor: { ...fullDoctor },
   };
   const selectFields = (record, select) => Object.fromEntries(Object.entries(select).flatMap(([key, value]) => {
     if (value === true) return [[key, record[key]]];
@@ -46,6 +46,7 @@ async function loadAdminDataActions({ doctorName = "Dr Example", experience = 5,
     clerkClient: async () => ({ users: { getUser: async () => clerkUser } }),
     revalidatePath: () => {},
   };
+  Object.assign(dependencies, await import("../lib/payment-payouts.mjs"));
   const transformed = (await adminSource)
     .replaceAll('"use server";', "")
     .replaceAll("export async function", "async function")
@@ -53,6 +54,7 @@ async function loadAdminDataActions({ doctorName = "Dr Example", experience = 5,
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { clerkClient } from "@clerk/nextjs/server";', "const { clerkClient } = dependencies;")
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
+    .replace('import { flagPaymentPayoutsForReview, releasePaymentPayoutAllocations, recordPaymentPayoutTransfer } from "@/lib/payment-payouts.mjs";', "const { flagPaymentPayoutsForReview, releasePaymentPayoutAllocations, recordPaymentPayoutTransfer } = dependencies;")
     .concat("\nreturn { getPendingDoctors, getVerifiedDoctors, getPendingPayouts };");
   return { ...new Function("dependencies", transformed)(dependencies), queries };
 }
@@ -103,12 +105,13 @@ test("pending payout response contains required payment details without medical 
   const actions = await loadAdminDataActions();
   const result = await actions.getPendingPayouts();
   const payout = result.payouts[0];
-  assert.equal(payout.paypalEmail, "doctor@example.com");
+  assert.equal(payout.currency, "INR");
+  assert.equal(payout.amountPaise, "2000");
   assert.equal(payout.doctor.email, "doctor@example.com");
   assert.equal("clerkUserId" in payout.doctor, false);
   assert.equal("allergies" in payout.doctor, false);
-  const query = actions.queries.at(-1);
-  assert.equal(query.select.paypalEmail, true);
+  const query = actions.queries[0];
+  assert.equal(query.select.netAmountPaise, true);
   assert.equal(query.select.doctor.select.email, true);
   assert.equal(query.select.doctor.select.bloodGroup, undefined);
 });
@@ -132,12 +135,13 @@ async function loadAdminAnalytics({ role = "ADMIN", failQuery = false, failAuth 
     },
     appointment: { findMany: async () => [] },
   };
-  const dependencies = { auth: async () => ({ userId: "clerk-user" }), db };
+  const dependencies = { auth: async () => ({ userId: "clerk-user" }), db, measureServerTiming: async (_label, operation) => operation() };
   const transformed = (await analyticsSource)
     .replaceAll('"use server";', "")
     .replaceAll("export async function", "async function")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
+    .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const { measureServerTiming } = dependencies;")
     .concat("\nreturn { getAdminAnalytics };");
   return { ...new Function("dependencies", transformed)(dependencies), queries };
 }

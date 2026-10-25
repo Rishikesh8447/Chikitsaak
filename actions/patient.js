@@ -36,8 +36,11 @@ export async function getPatientAppointments() {
         startTime: true,
         endTime: true,
         status: true,
+        checkoutExpiresAt: true,
         notes: true,
         patientDescription: true,
+        consultationMode: true,
+        payment: { select: { method: true, status: true, refundStatus: true, amountRupees: true, cashCollection: { select: { collectedAt: true } } } },
         doctor: {
           select: {
             id: true,

@@ -22,7 +22,6 @@ const DEMO_USERS = [
     city: "Pune",
     state: "Maharashtra",
     country: "India",
-    credits: 6,
   },
   {
     id: "demo_user_doctor_2",
@@ -37,7 +36,6 @@ const DEMO_USERS = [
     city: "Bengaluru",
     state: "Karnataka",
     country: "India",
-    credits: 6,
   },
   {
     id: "demo_user_doctor_3",
@@ -52,7 +50,6 @@ const DEMO_USERS = [
     city: "Jaipur",
     state: "Rajasthan",
     country: "India",
-    credits: 6,
   },
   {
     id: "demo_user_patient_1",
@@ -60,7 +57,6 @@ const DEMO_USERS = [
     email: "patient1.demo@chikitsaak.demo",
     name: "Mira Shah",
     role: "PATIENT",
-    credits: 4,
   },
   {
     id: "demo_user_patient_2",
@@ -68,7 +64,6 @@ const DEMO_USERS = [
     email: "patient2.demo@chikitsaak.demo",
     name: "Arjun Nair",
     role: "PATIENT",
-    credits: 8,
   },
   {
     id: "demo_user_patient_3",
@@ -76,7 +71,6 @@ const DEMO_USERS = [
     email: "patient3.demo@chikitsaak.demo",
     name: "Sana Khan",
     role: "PATIENT",
-    credits: 6,
   },
   {
     id: "demo_user_patient_4",
@@ -84,7 +78,6 @@ const DEMO_USERS = [
     email: "patient4.demo@chikitsaak.demo",
     name: "Kabir Joshi",
     role: "PATIENT",
-    credits: 6,
   },
   {
     id: "demo_user_patient_5",
@@ -92,7 +85,6 @@ const DEMO_USERS = [
     email: "patient5.demo@chikitsaak.demo",
     name: "Nisha Rao",
     role: "PATIENT",
-    credits: 8,
   },
 ];
 
@@ -201,33 +193,6 @@ const APPOINTMENTS = APPOINTMENT_DEFINITIONS.map((definition) => {
   };
 });
 
-const CREDIT_TRANSACTIONS = [
-  ...PATIENTS.map((patient, index) => ({
-    id: `demo_credit_grant_patient_${index + 1}`,
-    userId: patient.id,
-    amount: 10,
-    type: "ADMIN_ADJUSTMENT",
-    packageId: "demo_seed_initial_balance",
-    allocationKey: `demo-seed:credit-grant:${patient.clerkUserId}`,
-  })),
-  ...APPOINTMENTS.flatMap((appointment) => [
-    {
-      id: `demo_credit_patient_${appointment.id}`,
-      userId: appointment.patientId,
-      amount: -2,
-      type: "APPOINTMENT_DEDUCTION",
-      allocationKey: `demo-seed:${appointment.id}:patient-debit`,
-    },
-    {
-      id: `demo_credit_doctor_${appointment.id}`,
-      userId: appointment.doctorId,
-      amount: 2,
-      type: "APPOINTMENT_DEDUCTION",
-      allocationKey: `demo-seed:${appointment.id}:doctor-credit`,
-    },
-  ]),
-];
-
 const NOTIFICATIONS = [
   ...APPOINTMENTS.filter((appointment) => appointment.status === "SCHEDULED").flatMap((appointment) => [
     {
@@ -271,7 +236,6 @@ const MEDICINES = PRESCRIPTION_DEFINITIONS.flatMap((prescription, prescriptionIn
 const EXPECTED_BY_ID = (rows) => new Map(rows.map((row) => [row.id, row]));
 const EXPECTED_APPOINTMENTS = EXPECTED_BY_ID(APPOINTMENTS);
 const EXPECTED_AVAILABILITY = EXPECTED_BY_ID(AVAILABILITY_DEFINITIONS);
-const EXPECTED_TRANSACTIONS = EXPECTED_BY_ID(CREDIT_TRANSACTIONS);
 const EXPECTED_NOTIFICATIONS = EXPECTED_BY_ID(NOTIFICATIONS);
 const EXPECTED_REVIEWS = EXPECTED_BY_ID(REVIEW_DEFINITIONS);
 const EXPECTED_PRESCRIPTIONS = EXPECTED_BY_ID(PRESCRIPTION_DEFINITIONS);
@@ -315,17 +279,15 @@ async function assertSafeToReplaceDemoData(tx) {
   const ids = DEMO_USER_IDS;
   const appointmentIds = [...EXPECTED_APPOINTMENTS.keys()];
   const availabilityIds = [...EXPECTED_AVAILABILITY.keys()];
-  const transactionIds = [...EXPECTED_TRANSACTIONS.keys()];
   const notificationIds = [...EXPECTED_NOTIFICATIONS.keys()];
   const reviewIds = [...EXPECTED_REVIEWS.keys()];
   const prescriptionIds = [...EXPECTED_PRESCRIPTIONS.keys()];
   const medicineIds = [...EXPECTED_MEDICINES.keys()];
 
-  const [appointments, availability, payouts, transactions, notifications, reviews, prescriptions, medicines] = await Promise.all([
+  const [appointments, availability, payouts, notifications, reviews, prescriptions, medicines] = await Promise.all([
     tx.appointment.findMany({ where: { OR: [{ doctorId: { in: ids } }, { patientId: { in: ids } }, { id: { in: appointmentIds } }] } }),
     tx.availability.findMany({ where: { OR: [{ doctorId: { in: ids } }, { id: { in: availabilityIds } }] } }),
     tx.payout.findMany({ where: { doctorId: { in: ids } }, select: { id: true } }),
-    tx.creditTransaction.findMany({ where: { OR: [{ userId: { in: ids } }, { id: { in: transactionIds } }, { allocationKey: { startsWith: "demo-seed:" } }] } }),
     tx.notification.findMany({ where: { OR: [{ userId: { in: ids } }, { appointmentId: { in: appointmentIds } }, { id: { in: notificationIds } }] } }),
     tx.review.findMany({ where: { OR: [{ doctorId: { in: ids } }, { patientId: { in: ids } }, { appointmentId: { in: appointmentIds } }, { id: { in: reviewIds } }] } }),
     tx.prescription.findMany({ where: { OR: [{ doctorId: { in: ids } }, { patientId: { in: ids } }, { appointmentId: { in: appointmentIds } }, { id: { in: prescriptionIds } }] } }),
@@ -337,7 +299,6 @@ async function assertSafeToReplaceDemoData(tx) {
   if (payouts.length > 0) {
     throw new Error("Safety stop: a targeted demo doctor has payout records; financial records will not be removed.");
   }
-  assertExpectedOwnership(transactions, EXPECTED_TRANSACTIONS, "credit transaction", (row, expected) => row.userId === expected.userId && row.allocationKey === expected.allocationKey);
   assertExpectedOwnership(notifications, EXPECTED_NOTIFICATIONS, "notification", (row, expected) => row.userId === expected.userId && row.appointmentId === expected.appointmentId);
   assertExpectedOwnership(reviews, EXPECTED_REVIEWS, "review", (row, expected) => row.appointmentId === expected.appointmentId && row.patientId === expected.patientId && row.doctorId === expected.doctorId);
   assertExpectedOwnership(prescriptions, EXPECTED_PRESCRIPTIONS, "prescription", (row, expected) => row.appointmentId === expected.appointmentId);
@@ -363,7 +324,6 @@ async function seedDemoData() {
     const existingUserIds = await assertSafeToReplaceDemoData(tx);
     const appointmentIds = [...EXPECTED_APPOINTMENTS.keys()];
     const availabilityIds = [...EXPECTED_AVAILABILITY.keys()];
-    const transactionIds = [...EXPECTED_TRANSACTIONS.keys()];
     const notificationIds = [...EXPECTED_NOTIFICATIONS.keys()];
     const reviewIds = [...EXPECTED_REVIEWS.keys()];
     const prescriptionIds = [...EXPECTED_PRESCRIPTIONS.keys()];
@@ -376,7 +336,6 @@ async function seedDemoData() {
     await tx.prescription.deleteMany({ where: { id: { in: prescriptionIds } } });
     await tx.appointment.deleteMany({ where: { id: { in: appointmentIds } } });
     await tx.availability.deleteMany({ where: { id: { in: availabilityIds } } });
-    await tx.creditTransaction.deleteMany({ where: { id: { in: transactionIds } } });
 
     if (existingUserIds.length > 0) {
       await tx.user.deleteMany({ where: { id: { in: existingUserIds } } });
@@ -391,7 +350,6 @@ async function seedDemoData() {
     });
     await tx.availability.createMany({ data: AVAILABILITY_DEFINITIONS });
     await tx.appointment.createMany({ data: APPOINTMENTS.map((appointment) => ({ ...appointment, updatedAt: seedTimestamp })) });
-    await tx.creditTransaction.createMany({ data: CREDIT_TRANSACTIONS });
     await tx.notification.createMany({ data: NOTIFICATIONS });
     await tx.review.createMany({ data: REVIEW_DEFINITIONS.map((review) => ({ ...review, updatedAt: seedTimestamp })) });
 

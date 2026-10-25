@@ -10,17 +10,20 @@ import {
 import { getAdminAnalytics } from "@/actions/analytics";
 import { AnalyticsPanel } from "@/components/analytics-panel";
 import Link from "next/link";
+import { getAppointmentRefundReviews } from "@/actions/admin";
+import { AppointmentRefundReviews } from "./_components/appointment-refund-reviews";
 
 export default async function AdminPage({ searchParams }) {
   const params = await searchParams;
   const range = params?.range || 30;
   // Fetch all data in parallel
-  const [pendingDoctorsData, verifiedDoctorsData, pendingPayoutsData, analyticsData] =
+  const [pendingDoctorsData, verifiedDoctorsData, pendingPayoutsData, analyticsData, refundReviewsData] =
     await Promise.all([
       getPendingDoctors(),
       getVerifiedDoctors(),
       getPendingPayouts(),
       getAdminAnalytics(range),
+      getAppointmentRefundReviews(),
     ]);
 
   return (
@@ -39,7 +42,11 @@ export default async function AdminPage({ searchParams }) {
       </TabsContent>
 
       <TabsContent value="payouts" className="border-none p-0">
-        <PendingPayouts payouts={pendingPayoutsData.payouts || []} />
+        <PendingPayouts payouts={pendingPayoutsData.payouts || []} paymentPayoutIssues={pendingPayoutsData.paymentPayoutIssues || []} />
+      </TabsContent>
+
+      <TabsContent value="refunds" className="border-none p-0">
+        <AppointmentRefundReviews reviews={refundReviewsData.reviews || []} />
       </TabsContent>
 
       <TabsContent value="analytics" className="border-none p-0"><AnalyticsPanel title="Admin analytics" analytics={analyticsData} basePath="/admin" admin /></TabsContent>

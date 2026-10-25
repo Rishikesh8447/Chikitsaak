@@ -1,393 +1,98 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Check,
-  User,
-  DollarSign,
-  Mail,
-  Stethoscope,
-  Loader2,
-  AlertCircle,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from "react";
+import { AlertCircle, User } from "lucide-react";
 import { format } from "date-fns";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { approvePayout, rejectPayout } from "@/actions/admin";
+import { recordPaymentPayoutTransferAction, resolvePaymentPayoutOutcomeAction } from "@/actions/admin";
 import useFetch from "@/hooks/use-fetch";
 import { toast } from "sonner";
-import { BarLoader } from "react-spinners";
 
-export function PendingPayouts({ payouts }) {
-  const [selectedPayout, setSelectedPayout] = useState(null);
-  const [showApproveDialog, setShowApproveDialog] = useState(false);
+const formatPaise = (value = "0") => {
+  const paise = BigInt(value);
+  return `₹${paise / 100n}.${String(paise % 100n).padStart(2, "0")}`;
+};
 
-  // Custom hook for approve payout server action
-  const { loading, data, fn: submitApproval } = useFetch(approvePayout);
-  const { loading: rejecting, data: rejectData, fn: submitRejection } = useFetch(rejectPayout);
-
-  // Handle view details
-  const handleViewDetails = (payout) => {
-    setSelectedPayout(payout);
-  };
-
-  // Handle approve payout
-  const handleApprovePayout = (payout) => {
-    setSelectedPayout(payout);
-    setShowApproveDialog(true);
-  };
-
-  // Confirm approval
-  const confirmApproval = async () => {
-    if (!selectedPayout || loading) return;
-
-    const formData = new FormData();
-    formData.append("payoutId", selectedPayout.id);
-
-    await submitApproval(formData);
-  };
+export function PendingPayouts({ payouts = [], paymentPayoutIssues = [] }) {
+  const [transferReferences, setTransferReferences] = useState({});
+  const { loading: recording, fn: submitTransfer } = useFetch(recordPaymentPayoutTransferAction);
+  const { loading: resolving, data: outcomeData, fn: submitResolution } = useFetch(resolvePaymentPayoutOutcomeAction);
 
   useEffect(() => {
-    if (data?.success) {
-      setShowApproveDialog(false);
-      setSelectedPayout(null);
-      toast.success("Payout approved successfully!");
-    }
-  }, [data]);
+    if (outcomeData?.success) toast.success(outcomeData.alreadyResolved ? "Payout outcome was already recorded." : "Payout transfer outcome recorded.");
+  }, [outcomeData]);
 
-  useEffect(() => { if (rejectData?.success) toast.success("Payout declined and reserved credits returned."); }, [rejectData]);
-  const handleRejectPayout = async (payout) => {
-    if (rejecting || !window.confirm(`Decline Dr. ${payout.doctor.name}'s payout and return ${payout.credits} reserved credits?`)) return;
+  const recordTransfer = async (payout) => {
+    const reference = transferReferences[payout.id]?.trim();
+    if (!reference || !window.confirm("Confirm that this manual bank transfer has already completed. This records the reference only; it does not send money.")) return;
     const formData = new FormData();
     formData.set("payoutId", payout.id);
-    await submitRejection(formData);
+    formData.set("transferReference", reference);
+    formData.set("transferConfirmed", "true");
+    await submitTransfer(formData);
+    setTransferReferences((current) => ({ ...current, [payout.id]: "" }));
   };
 
-  const closeDialogs = () => {
-    setSelectedPayout(null);
-    setShowApproveDialog(false);
+  const resolveOutcome = async (payout, resolution) => {
+    const reference = transferReferences[payout.id]?.trim();
+    const prompt = resolution === "NOT_SENT"
+      ? `Confirm that no bank or UPI transfer was sent for Dr. ${payout.doctor.name}'s payout. Reserved collections will be released.`
+      : `Confirm that the manual transfer for Dr. ${payout.doctor.name}'s payout has already completed. This records it only; it does not send or reverse money.`;
+    if (resolving || !window.confirm(prompt) || (resolution === "TRANSFER_SENT" && !reference)) return;
+    const formData = new FormData();
+    formData.set("payoutId", payout.id);
+    formData.set("resolution", resolution);
+    if (resolution === "NOT_SENT") formData.set("transferNotSentConfirmed", "true");
+    else {
+      formData.set("transferReference", reference);
+      formData.set("transferConfirmed", "true");
+    }
+    await submitResolution(formData);
+    if (resolution === "TRANSFER_SENT") setTransferReferences((current) => ({ ...current, [payout.id]: "" }));
   };
 
-  return (
-    <div>
-      <Card className="bg-muted/20 border-emerald-900/20">
-        <CardHeader>
-          <CardTitle className="text-xl font-bold text-foreground">
-            Pending Payouts
-          </CardTitle>
-          <CardDescription>
-            Review and approve doctor payout requests
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {payouts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No pending payout requests at this time.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {payouts.map((payout) => (
-                <Card
-                  key={payout.id}
-                  className="bg-background border-emerald-900/20 hover:border-emerald-700/30 transition-all"
-                >
-                  <CardContent className="p-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <div className="bg-muted/20 rounded-full p-2 mt-1">
-                          <User className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-medium text-foreground">
-                            Dr. {payout.doctor.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {payout.doctor.specialty}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <div className="flex items-center">
-                              <DollarSign className="h-4 w-4 mr-1 text-primary" />
-                              <span>
-                                {payout.credits} credits · $
-                                {payout.netAmount.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="flex items-center">
-                              <Mail className="h-4 w-4 mr-1 text-primary" />
-                              <span className="text-xs">
-                                {payout.paypalEmail}
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Requested{" "}
-                            {format(
-                              new Date(payout.createdAt),
-                              "MMM d, yyyy 'at' h:mm a"
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-2 self-end lg:self-center">
-                        <Badge
-                          variant="outline"
-                          className="w-fit border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"
-                        >
-                          Pending
-                        </Badge>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewDetails(payout)}
-                            className="border-emerald-900/30 hover:bg-muted/80"
-                          >
-                            View Details
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleApprovePayout(payout)}
-                            className="bg-primary hover:bg-primary/90"
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button type="button" variant="outline" size="sm" disabled={rejecting} onClick={() => handleRejectPayout(payout)}>Decline</Button>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Payout Details Dialog */}
-      {selectedPayout && !showApproveDialog && (
-        <Dialog open={!!selectedPayout} onOpenChange={closeDialogs}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-foreground">
-                Payout Request Details
-              </DialogTitle>
-              <DialogDescription>
-                Review the payout request information
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6 py-4">
-              {/* Doctor Information */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Stethoscope className="h-5 w-5 text-primary" />
-                  <h3 className="text-foreground font-medium">Doctor Information</h3>
+  return <div className="space-y-4">
+    {paymentPayoutIssues.length > 0 && <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription>
+        <strong>Post-transfer payment review</strong>
+        <ul className="mt-2 space-y-1">{paymentPayoutIssues.map((payout) => <li key={payout.id}>
+          Dr. {payout.doctor.name}: {formatPaise(payout.netAmountPaise)} transferred ({payout.transferReference}); {payout.reviewReason}. Reconcile manually; no bank transfer is reversed here.
+        </li>)}</ul>
+      </AlertDescription>
+    </Alert>}
+    <Card className="border-emerald-900/20 bg-muted/20">
+      <CardHeader><CardTitle className="text-xl">Pending INR payouts</CardTitle><CardDescription>Transfers are performed manually outside the application. Record them only after confirmation.</CardDescription></CardHeader>
+      <CardContent>
+        {payouts.length === 0 ? <div className="py-8 text-center text-muted-foreground">No pending payout requests at this time.</div> : <div className="space-y-4">
+          {payouts.map((payout) => {
+            const flagged = Boolean(payout.reviewRequiredAt);
+            return <Card key={payout.id} className="border-emerald-900/20 bg-background">
+              <CardContent className="space-y-4 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-3"><div className="mt-1 rounded-full bg-muted/20 p-2"><User className="h-5 w-5 text-primary" /></div><div>
+                    <h3 className="font-medium">Dr. {payout.doctor.name}</h3><p className="text-sm text-muted-foreground">{payout.doctor.specialty}</p>
+                    <p className="mt-2 text-sm font-medium">INR collection · {formatPaise(payout.netAmountPaise)} · no commission</p>
+                    <p className="text-xs text-muted-foreground">Requested {format(new Date(payout.createdAt), "MMM d, yyyy 'at' h:mm a")}</p>
+                  </div></div>
+                  <Badge variant="outline">Processing</Badge>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Name
-                    </p>
-                    <p className="text-foreground">
-                      Dr. {selectedPayout.doctor.name}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Email
-                    </p>
-                    <p className="text-foreground">{selectedPayout.doctor.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Specialty
-                    </p>
-                    <p className="text-foreground">
-                      {selectedPayout.doctor.specialty}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Current Credits
-                    </p>
-                    <p className="text-foreground">
-                      {selectedPayout.doctor.credits}
-                    </p>
-                  </div>
+                {flagged && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription><strong>Refund review remains open.</strong> {payout.reviewReason || "A payment event needs reconciliation."} Resolve the transfer outcome explicitly. A recorded transfer does not reverse or issue a refund.</AlertDescription></Alert>}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input aria-label={`Transfer reference for ${payout.doctor.name}`} className="h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm" value={transferReferences[payout.id] || ""} onChange={(event) => setTransferReferences((current) => ({ ...current, [payout.id]: event.target.value }))} placeholder="Manual bank transfer reference" />
+                  {flagged ? <>
+                    <Button type="button" variant="outline" disabled={resolving} onClick={() => resolveOutcome(payout, "NOT_SENT")}>Confirm not sent &amp; release</Button>
+                    <Button type="button" disabled={resolving || !transferReferences[payout.id]?.trim()} onClick={() => resolveOutcome(payout, "TRANSFER_SENT")}>Record transfer already sent</Button>
+                  </> : <Button type="button" disabled={recording || !transferReferences[payout.id]?.trim()} onClick={() => recordTransfer(payout)}>Record confirmed transfer</Button>}
                 </div>
-              </div>
-
-              {/* Payout Information */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  <h3 className="text-foreground font-medium">Payout Details</h3>
-                </div>
-                <div className="bg-muted/20 p-4 rounded-lg border border-emerald-900/20 space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Credits to pay out:
-                    </span>
-                    <span className="text-foreground font-medium">
-                      {selectedPayout.credits}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Gross amount (10 USD/credit):
-                    </span>
-                    <span className="text-foreground">
-                      ${selectedPayout.amount.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Platform fee (2 USD/credit):
-                    </span>
-                    <span className="text-foreground">
-                      -${selectedPayout.platformFee.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="border-t border-emerald-900/20 pt-3 flex justify-between font-medium">
-                    <span className="text-foreground">Net payout:</span>
-                    <span className="text-primary">
-                      ${selectedPayout.netAmount.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="border-t border-emerald-900/20 pt-3">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      PayPal Email
-                    </p>
-                    <p className="text-foreground">{selectedPayout.paypalEmail}</p>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={closeDialogs}
-                className="border-emerald-900/30"
-              >
-                Close
-              </Button>
-              <Button
-                onClick={() => handleApprovePayout(selectedPayout)}
-                className="bg-primary hover:bg-primary/90"
-              >
-                <Check className="h-4 w-4 mr-1" />
-                Approve Payout
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Approval Confirmation Dialog */}
-      {showApproveDialog && selectedPayout && (
-        <Dialog
-          open={showApproveDialog}
-          onOpenChange={() => setShowApproveDialog(false)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-foreground">
-                Confirm Payout Approval
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to approve this payout?
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  This action will:
-                  <ul className="mt-2 space-y-1 list-disc pl-4">
-                    <li>
-                      Pay out {selectedPayout.credits} credits reserved when Dr.{" "}
-                      {selectedPayout.doctor.name} requested the payout
-                    </li>
-                    <li>Mark the payout as PROCESSED</li>
-                    <li>This action cannot be undone</li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
-
-              <div className="bg-muted/20 p-4 rounded-lg border border-emerald-900/20">
-                <div className="flex justify-between mb-2">
-                  <span className="text-muted-foreground">Doctor:</span>
-                  <span className="text-foreground">
-                    Dr. {selectedPayout.doctor.name}
-                  </span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-muted-foreground">Amount to pay:</span>
-                  <span className="text-primary font-medium">
-                    ${selectedPayout.netAmount.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">PayPal:</span>
-                  <span className="text-foreground text-sm">
-                    {selectedPayout.paypalEmail}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {loading && <BarLoader width={"100%"} color="#36d7b7" />}
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setShowApproveDialog(false)}
-                disabled={loading}
-                className="border-emerald-900/30"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={confirmApproval}
-                disabled={loading}
-                className="bg-primary hover:bg-primary/90"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Check className="mr-2 h-4 w-4" />
-                    Confirm Approval
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
-  );
+              </CardContent>
+            </Card>;
+          })}
+        </div>}
+      </CardContent>
+    </Card>
+  </div>;
 }

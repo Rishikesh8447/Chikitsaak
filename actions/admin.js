@@ -4,6 +4,7 @@ import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { flagPaymentPayoutsForReview, releasePaymentPayoutAllocations, recordPaymentPayoutTransfer } from "@/lib/payment-payouts.mjs";
 
 const ADMIN_DOCTOR_REVIEW_SELECT = {
   id: true,
@@ -30,22 +31,6 @@ const ADMIN_VERIFIED_DOCTOR_SELECT = {
 function serializeDoctorForAdmin(doctor) {
   const { clerkUserId, ...publicFields } = doctor;
   return publicFields;
-}
-
-function hasValidPayoutDetails(payout) {
-  return Number.isSafeInteger(payout?.credits) && payout.credits > 0 &&
-    payout.amount === payout.credits * 10 &&
-    payout.platformFee === payout.credits * 2 &&
-    payout.netAmount === payout.credits * 8 &&
-    typeof payout.paypalEmail === "string" &&
-    payout.paypalEmail.length <= 254 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payout.paypalEmail);
-}
-
-function hasValidReservation(reservation, payout) {
-  return reservation.userId === payout.doctorId &&
-    reservation.amount === -payout.credits &&
-    reservation.type === "ADMIN_ADJUSTMENT";
 }
 
 async function getClerkDisplayName(clerkUserId, fallbackName) {
@@ -275,13 +260,14 @@ export async function getPendingPayouts() {
       },
       select: {
         id: true,
-        amount: true,
         status: true,
         createdAt: true,
-        credits: true,
-        platformFee: true,
-        netAmount: true,
-        paypalEmail: true,
+        currency: true,
+        amountPaise: true,
+        platformFeePaise: true,
+        netAmountPaise: true,
+        reviewRequiredAt: true,
+        reviewReason: true,
         doctor: {
           select: {
             id: true,
@@ -289,7 +275,6 @@ export async function getPendingPayouts() {
             name: true,
             email: true,
             specialty: true,
-            credits: true,
           },
         },
       },
@@ -297,11 +282,34 @@ export async function getPendingPayouts() {
         createdAt: "desc",
       },
     });
+    const paymentPayoutIssues = await db.payout.findMany({
+      where: { status: "PROCESSED", reviewRequiredAt: { not: null } },
+      select: {
+        id: true,
+        currency: true,
+        netAmountPaise: true,
+        transferReference: true,
+        reviewRequiredAt: true,
+        reviewReason: true,
+        processedAt: true,
+        doctor: { select: { id: true, clerkUserId: true, name: true, email: true, specialty: true } },
+      },
+      orderBy: { reviewRequiredAt: "desc" },
+    });
 
     const payoutsWithNames = await hydratePayoutDoctorNames(pendingPayouts);
+    const payoutIssuesWithNames = await hydratePayoutDoctorNames(paymentPayoutIssues);
     return {
       payouts: payoutsWithNames.map(({ doctor, ...payout }) => ({
         ...payout,
+        amountPaise: payout.amountPaise?.toString() ?? null,
+        platformFeePaise: payout.platformFeePaise?.toString() ?? null,
+        netAmountPaise: payout.netAmountPaise?.toString() ?? null,
+        doctor: serializeDoctorForAdmin(doctor),
+      })),
+      paymentPayoutIssues: payoutIssuesWithNames.map(({ doctor, ...payout }) => ({
+        ...payout,
+        netAmountPaise: payout.netAmountPaise?.toString() ?? null,
         doctor: serializeDoctorForAdmin(doctor),
       })),
     };
@@ -311,100 +319,186 @@ export async function getPendingPayouts() {
   }
 }
 
-/**
- * Approves a payout request and deducts credits from doctor's account
- */
-export async function approvePayout(formData) {
-  const isAdmin = await verifyAdmin();
-  if (!isAdmin) throw new Error("Unauthorized");
-
+/** Resolve a payment payout only after an administrator confirms the manual transfer outcome. */
+export async function resolvePaymentPayoutOutcomeAction(formData) {
+  const admin = await getPersistedAdmin();
   const payoutId = formData.get("payoutId");
-
-  if (!payoutId) {
-    throw new Error("Payout ID is required");
+  const resolution = formData.get("resolution");
+  if (typeof payoutId !== "string" || !payoutId) throw new Error("Payout ID is required");
+  if (resolution !== "NOT_SENT" && resolution !== "TRANSFER_SENT") throw new Error("Confirm whether the transfer was sent");
+  if (resolution === "NOT_SENT" && formData.get("transferNotSentConfirmed") !== "true") {
+    throw new Error("Confirm that no transfer occurred before releasing the reservation");
+  }
+  const transferReference = formData.get("transferReference");
+  if (resolution === "TRANSFER_SENT") {
+    if (formData.get("transferConfirmed") !== "true") throw new Error("Confirm that the manual transfer has already completed");
+    if (typeof transferReference !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._/-]{2,199}$/.test(transferReference.trim())) {
+      throw new Error("A valid manual transfer reference is required");
+    }
   }
 
   try {
-    // Get admin user info
-    const { userId } = await auth();
-    const admin = await db.user.findUnique({
-      where: { clerkUserId: userId },
-      select: { id: true, role: true },
-    });
-    if (admin?.role !== "ADMIN") throw new Error("Unauthorized");
-
-    await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       const payout = await tx.payout.findFirst({
-        where: { id: payoutId, status: "PROCESSING" },
+        where: { id: payoutId },
         include: { doctor: { select: { id: true, role: true } } },
       });
-      if (!payout) throw new Error("Payout request not found or already processed");
-      if (
-        payout.doctor?.role !== "DOCTOR" ||
-        payout.doctor.id === admin.id ||
-        !hasValidPayoutDetails(payout)
-      ) throw new Error("Payout request is invalid");
-      const reservation = await tx.creditTransaction.findUnique({ where: { allocationKey: `payout:${payout.id}:credit-reservation` } });
-      if (reservation && !hasValidReservation(reservation, payout)) {
-        throw new Error("Payout reservation is invalid");
+      if (!payout || payout.doctor?.role !== "DOCTOR" || payout.doctor.id === admin.id) {
+        throw new Error("Payout request is invalid");
       }
-      if (!reservation) {
-        const legacyDebit = await tx.user.updateMany({ where: { id: payout.doctorId, credits: { gte: payout.credits } }, data: { credits: { decrement: payout.credits } } });
-        if (legacyDebit.count !== 1) throw new Error("Doctor does not have enough available credits");
-        await tx.creditTransaction.create({ data: { userId: payout.doctorId, amount: -payout.credits, type: "ADMIN_ADJUSTMENT", allocationKey: `payout:${payout.id}:reserved-credit-debit` } });
-      }
-      const changed = await tx.payout.updateMany({ where: { id: payoutId, status: "PROCESSING" }, data: { status: "PROCESSED", processedAt: new Date(), processedBy: admin?.id || "unknown" } });
-      if (changed.count !== 1) throw new Error("Payout request not found or already processed");
-      await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "Payout status updated", message: "Your payout request was processed by an administrator.", dedupeKey: `payout:${payout.id}:processed` }], skipDuplicates: true });
-    });
 
+      if (resolution === "NOT_SENT") {
+        if (payout.status === "FAILED") {
+          const allocations = await tx.payoutPaymentAllocation.findMany({
+            where: { payoutId, status: { in: ["RESERVED", "RELEASED", "PAID"] } },
+            select: { status: true, activePaymentId: true },
+          });
+          if (allocations.length && allocations.every((allocation) => allocation.status === "RELEASED" && allocation.activePaymentId === null)) {
+            return { alreadyResolved: true };
+          }
+        }
+        if (payout.status !== "PROCESSING") throw new Error("Payment payout is no longer pending");
+        await releasePaymentPayoutAllocations(tx, payout.id, {
+          processedBy: admin.id,
+          allowReviewRelease: Boolean(payout.reviewRequiredAt),
+        });
+        await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "Payout request declined", message: "An administrator confirmed that no manual transfer occurred; reserved collections were released.", dedupeKey: `payout:${payout.id}:declined` }], skipDuplicates: true });
+        return { alreadyResolved: false };
+      }
+
+      await recordPaymentPayoutTransfer(tx, {
+        payout,
+        adminId: admin.id,
+        transferReference: transferReference.trim(),
+        allowReviewRequired: Boolean(payout.reviewRequiredAt),
+      });
+      await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "INR payout recorded", message: "An administrator recorded the confirmed manual transfer for your INR payout.", dedupeKey: `payout:${payout.id}:manual-transfer-recorded` }], skipDuplicates: true });
+      return { alreadyResolved: payout.status === "PROCESSED" };
+    }, { isolationLevel: "Serializable" });
     revalidatePath("/admin");
-    return { success: true };
+    revalidatePath("/doctor");
+    return { success: true, ...result };
   } catch (error) {
-    console.error("Failed to approve payout.");
-    throw new Error("Failed to approve payout. Please try again.");
+    if (error instanceof Error && [
+      "Unauthorized", "Payout ID is required", "Payout request is invalid", "Payment payout is no longer pending",
+      "Confirm that no transfer occurred before releasing the reservation", "Confirm that the manual transfer has already completed",
+      "A valid manual transfer reference is required", "Payout requires explicit refund-review resolution", "Payout is not flagged for refund review",
+      "Payout allocations are no longer eligible", "Payout allocation total does not match the reserved amount",
+      "Payout changed before transfer confirmation was recorded", "Payout allocations changed before transfer confirmation was recorded",
+    ].includes(error.message)) throw error;
+    throw new Error("Unable to resolve the payment payout. Confirm its transfer outcome and current state before retrying.");
   }
 }
 
-/** Reject a payout and release its reserved credits back to the doctor's balance. */
-export async function rejectPayout(formData) {
-  const isAdmin = await verifyAdmin();
-  if (!isAdmin) throw new Error("Unauthorized");
-  const payoutId = formData.get("payoutId");
-  if (typeof payoutId !== "string" || !payoutId) throw new Error("Payout ID is required");
+/** Record an externally completed manual transfer; this action never initiates a transfer. */
+export async function recordPaymentPayoutTransferAction(formData) {
   const { userId } = await auth();
-  try {
-    const admin = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true } });
-    if (admin?.role !== "ADMIN") throw new Error("Unauthorized");
-    await db.$transaction(async (tx) => {
-      const payout = await tx.payout.findFirst({
-        where: { id: payoutId, status: "PROCESSING" },
-        include: { doctor: { select: { id: true, role: true } } },
-      });
-      if (!payout) throw new Error("Payout request not found or already processed");
-      if (payout.doctor?.role !== "DOCTOR" || payout.doctor.id === admin.id || !Number.isSafeInteger(payout.credits) || payout.credits <= 0) {
-        throw new Error("Payout request is invalid");
-      }
-      const reservation = await tx.creditTransaction.findUnique({ where: { allocationKey: `payout:${payout.id}:credit-reservation` } });
-      if (reservation && !hasValidReservation(reservation, payout)) {
-        throw new Error("Payout reservation is invalid");
-      }
-      const changed = await tx.payout.updateMany({ where: { id: payout.id, status: "PROCESSING" }, data: { status: "FAILED", processedAt: new Date(), processedBy: admin.id } });
-      if (changed.count !== 1) throw new Error("Payout request not found or already processed");
-      if (reservation) {
-        await tx.user.update({ where: { id: payout.doctorId }, data: { credits: { increment: payout.credits } } });
-        await tx.creditTransaction.create({ data: { userId: payout.doctorId, amount: payout.credits, type: "ADMIN_ADJUSTMENT", allocationKey: `payout:${payout.id}:reserved-credit-release` } });
-      }
-      await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "Payout request declined", message: "Your payout request was declined and its credits were returned to your balance.", dedupeKey: `payout:${payout.id}:declined` }], skipDuplicates: true });
-    });
-    revalidatePath("/admin");
-    revalidatePath("/doctor");
-    return { success: true };
-  } catch (error) {
-    console.error("Failed to reject payout.");
-    if (error instanceof Error && ["Unauthorized", "Payout ID is required", "Payout request not found or already processed", "Payout request is invalid", "Payout reservation is invalid"].includes(error.message)) {
-      throw error;
-    }
-    throw new Error("Failed to reject payout. Please try again.");
+  if (!userId || !(await verifyAdmin())) throw new Error("Unauthorized");
+  const payoutId = formData.get("payoutId");
+  const transferReference = formData.get("transferReference");
+  const transferConfirmed = formData.get("transferConfirmed");
+  if (typeof payoutId !== "string" || !payoutId) throw new Error("Payout ID is required");
+  if (transferConfirmed !== "true") throw new Error("Confirm the manual transfer before recording it");
+  if (typeof transferReference !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._/-]{2,199}$/.test(transferReference.trim())) {
+    throw new Error("A valid manual transfer reference is required");
   }
+  const admin = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true } });
+  if (admin?.role !== "ADMIN") throw new Error("Unauthorized");
+  const reference = transferReference.trim();
+  try {
+    await db.$transaction(async (tx) => {
+      const payout = await tx.payout.findFirst({ where: { id: payoutId }, include: { doctor: { select: { id: true, role: true } } } });
+      if (payout?.doctor?.role !== "DOCTOR" || payout.doctor.id === admin.id) throw new Error("Payout request is invalid");
+      await recordPaymentPayoutTransfer(tx, { payout, adminId: admin.id, transferReference: reference });
+      await tx.notification.createMany({ data: [{ userId: payout.doctorId, type: "PAYOUT_STATUS", title: "INR payout recorded", message: "An administrator recorded the confirmed manual transfer for your INR payout.", dedupeKey: `payout:${payout.id}:manual-transfer-recorded` }], skipDuplicates: true });
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (error instanceof Error && ["Payout request is invalid", "Payment payout is no longer pending", "Payout requires manual refund review before transfer", "Payout allocations are no longer eligible", "Payout allocation total does not match the reserved amount", "Payout changed before transfer confirmation was recorded", "Payout allocations changed before transfer confirmation was recorded"].includes(error.message)) throw error;
+    throw new Error("Unable to record the manual transfer. Confirm its reference and payout state before retrying.");
+  }
+  revalidatePath("/admin");
+  revalidatePath("/doctor");
+  return { success: true };
+}
+
+async function getPersistedAdmin() {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+  const admin = await db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true } });
+  if (admin?.role !== "ADMIN") throw new Error("Unauthorized");
+  return admin;
+}
+
+/** Return only the information needed by the admin refund-review queue. */
+export async function getAppointmentRefundReviews() {
+  await getPersistedAdmin();
+  try {
+    const payments = await db.appointmentPayment.findMany({
+      where: { refundStatus: "REVIEW_REQUIRED" },
+      include: {
+        appointment: { select: {
+          id: true,
+          startTime: true,
+          endTime: true,
+          status: true,
+          patient: { select: { name: true } },
+          doctor: { select: { name: true } },
+        } },
+        webhookEvents: { where: { status: "REVIEW_REQUIRED" }, select: {
+          razorpayPaymentId: true,
+          amountPaise: true,
+          currency: true,
+          receivedAt: true,
+        } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    return { reviews: payments.map((payment) => ({
+      id: payment.id,
+      amountRupees: payment.amountRupees,
+      currency: payment.currency,
+      razorpayPaymentId: payment.razorpayPaymentId,
+      createdAt: payment.createdAt,
+      appointment: payment.appointment,
+      capturedEvents: payment.webhookEvents || [],
+    })) };
+  } catch {
+    throw new Error("Failed to fetch appointment refund reviews");
+  }
+}
+
+/** Record one durable admin approval or rejection; this does not issue a provider refund. */
+export async function decideAppointmentRefundReview(formData) {
+  const admin = await getPersistedAdmin();
+  const paymentId = formData.get("paymentId");
+  const decision = formData.get("decision");
+  const note = formData.get("note");
+  if (typeof paymentId !== "string" || !paymentId || !["APPROVED", "REJECTED"].includes(decision)) {
+    throw new Error("Invalid refund review decision");
+  }
+  if (typeof note !== "string" || note.trim().length < 3 || note.trim().length > 2000) {
+    throw new Error("Add an audit note between 3 and 2,000 characters");
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      const changed = await tx.appointmentPayment.updateMany({
+        where: { id: paymentId, refundStatus: "REVIEW_REQUIRED" },
+        data: { refundStatus: decision },
+      });
+      if (changed.count !== 1) throw new Error("Refund review was already decided or is unavailable");
+      await flagPaymentPayoutsForReview(tx, paymentId, `Refund review decision recorded: ${decision}`);
+      await tx.appointmentRefundDecision.create({ data: {
+        paymentId,
+        adminUserId: admin.id,
+        decision,
+        note: note.trim(),
+      } });
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Refund review was already decided or is unavailable") throw error;
+    throw new Error("Failed to record refund decision");
+  }
+  revalidatePath("/admin");
+  return { success: true, decision };
 }

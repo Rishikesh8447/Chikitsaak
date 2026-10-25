@@ -1,157 +1,68 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { readFile } = require("node:fs/promises");
+const { readFile, access, readdir } = require("node:fs/promises");
 const { join } = require("node:path");
 const { cwd } = require("node:process");
 
-const sourcePromise = readFile(join(cwd(), "actions", "credits.js"), "utf8");
+const read = (file) => readFile(join(cwd(), file), "utf8");
 
-async function createAllocator({ plan = "standard", historical = [], planError = false } = {}) {
-  const source = await sourcePromise;
-  const state = {
-    user: { id: "user-1", clerkUserId: "clerk-user", role: "PATIENT", credits: 2 },
-    transactions: structuredClone(historical),
-  };
-  const auth = async () => ({ userId: "clerk-user", has: ({ plan: requested }) => {
-    if (planError) throw new Error("Clerk unavailable");
-    return plan === requested;
-  } });
-  const db = {
-    user: { findUnique: async () => structuredClone(state.user) },
-    $transaction: async (work) => work({
-      creditTransaction: {
-        findFirst: async ({ where }) => state.transactions.find((entry) => entry.userId === where.userId && entry.type === where.type && where.allocationKey.in.includes(entry.allocationKey)) || null,
-        createMany: async ({ data, skipDuplicates }) => {
-          let count = 0;
-          for (const entry of data) {
-            if (state.transactions.some((existing) => existing.allocationKey === entry.allocationKey)) {
-              if (skipDuplicates) continue;
-              throw new Error("Duplicate allocation key");
-            }
-            state.transactions.push(structuredClone(entry));
-            count += 1;
-          }
-          return { count };
-        },
-      },
-      user: {
-        update: async ({ data }) => {
-          state.user.credits += data.credits.increment;
-          return structuredClone(state.user);
-        },
-      },
-    }),
-  };
-  const transformed = source
-    .replaceAll('"use server";', "")
-    .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
-    .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
-    .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
-    .replace("export async function checkAndAllocateCredits", "async function checkAndAllocateCredits")
-    .replace("export async function getMyCreditPlan", "async function getMyCreditPlan")
-    .replace("export async function getMyCreditTransactions", "async function getMyCreditTransactions")
-    .concat("\nreturn { checkAndAllocateCredits, getMyCreditPlan };");
-  const actions = new Function("dependencies", transformed)({ db, auth, revalidatePath: () => {} });
-  return { ...actions, state, setPlan: (nextPlan) => { plan = nextPlan; } };
-}
+test("application routes and actions no longer expose the legacy credit product", async () => {
+  const [proxy, payoutActions, adminActions, schema, seed, pricing] = await Promise.all([
+    read("proxy.js"), read("actions/payout.js"), read("actions/admin.js"),
+    read("prisma/schema.prisma"), read("prisma/seed.js"), read("components/pricing.jsx"),
+  ]);
+  const [creditsRoute, creditAction, eligibilityHelper] = await Promise.all([
+    access(join(cwd(), "app/(main)/credits/page.jsx")).then(() => true, () => false),
+    access(join(cwd(), "actions/credits.js")).then(() => true, () => false),
+    access(join(cwd(), "lib/payout-eligibility.mjs")).then(() => true, () => false),
+  ]);
+  assert.equal(creditsRoute, false);
+  assert.equal(creditAction, false);
+  assert.equal(eligibilityHelper, false);
+  assert.doesNotMatch(proxy, /\/credits/);
+  assert.doesNotMatch(payoutActions, /credits|paypal|requestPayout|payoutKind|LEGACY_CREDIT/i);
+  assert.doesNotMatch(adminActions, /creditTransaction|approvePayout|rejectPayout|paypal|payoutKind|LEGACY_CREDIT/i);
+  assert.doesNotMatch(schema, /credits\s+Int|CreditTransaction|TransactionType|PayoutKind|paypalEmail|platformFee\s+Int|netAmount\s+Int/);
+  assert.doesNotMatch(seed, /credits:|CREDIT_TRANSACTIONS|creditTransaction/);
+  assert.doesNotMatch(pricing, /credits?|subscription/i);
+});
 
-function monthKey(offset = 0) {
-  const date = new Date();
-  date.setUTCDate(1);
-  date.setUTCMonth(date.getUTCMonth() + offset);
-  return date.toISOString().slice(0, 7);
-}
+test("retirement migration aborts on legacy data and preserves payment payout allocations", async () => {
+  const migration = await read("prisma/migrations/20261024130000_remove_legacy_credit_system/migration.sql");
+  assert.match(migration.trim(), /^--[\s\S]*BEGIN;[\s\S]*COMMIT;$/);
+  assert.match(migration, /WHERE "credits" <> 0/);
+  assert.match(migration, /FROM "CreditTransaction"/);
+  assert.match(migration, /WHERE "payoutKind" = 'LEGACY_CREDIT'/);
+  assert.match(migration, /WHERE "type" = 'CREDIT_TRANSACTION'/);
+  assert.doesNotMatch(migration, /IF NOT EXISTS/);
+  assert.match(migration, /DROP CONSTRAINT "Payout_payment_collection_amounts_check"/);
+  assert.match(migration, /ADD CONSTRAINT "Payout_payment_amounts_check" CHECK/);
+  assert.match(migration, /"platformFeePaise" = 0/);
+  assert.match(migration, /"netAmountPaise" = "amountPaise"/);
+  assert.match(migration, /"status" = 'PROCESSED'.*"transferReference" IS NOT NULL/s);
+  assert.match(migration, /DROP TABLE "CreditTransaction"/);
+  assert.match(migration, /ALTER TABLE "Notification" ALTER COLUMN "type" TYPE/);
+  assert.doesNotMatch(migration, /DROP TABLE "PayoutPaymentAllocation"|DROP TYPE "PayoutAllocationStatus"/);
+  assert.ok(migration.indexOf("DO $$") < migration.indexOf("ALTER TABLE \"Payout\" DROP CONSTRAINT"));
+  assert.ok(migration.indexOf("DROP TYPE \"NotificationType\"") < migration.indexOf("ALTER TYPE \"NotificationType_new\" RENAME"));
+});
 
-function monthlyEntry(plan, month = monthKey()) {
-  return { userId: "user-1", amount: plan === "premium" ? 24 : 10, type: "CREDIT_PURCHASE", packageId: plan, allocationKey: `user-1:${plan}:${month}` };
-}
-
-for (const [plan, monthlyCredits] of [["free_user", 0], ["standard", 10], ["premium", 24]]) {
-  test(`${plan} entitlement reports its monthly allowance from the authenticated server context`, async () => {
-    const { getMyCreditPlan } = await createAllocator({ plan });
-    assert.deepEqual(await getMyCreditPlan(), { plan, monthlyCredits });
-  });
-}
-
-test("first monthly allocation grants the selected plan amount once and reports the Prisma balance", async () => {
-  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "standard" });
-  const result = await checkAndAllocateCredits();
-  assert.deepEqual(result, { success: true, allocated: true, plan: "standard", monthlyCredits: 10, balance: 12 });
-  assert.equal(state.user.credits, 12);
-  assert.deepEqual(state.transactions.map(({ amount, packageId, allocationKey }) => ({ amount, packageId, allocationKey })), [
-    { amount: 10, packageId: "standard", allocationKey: `user-1:monthly:${monthKey()}` },
+test("credit retirement migration follows all current payment migrations", async () => {
+  const migrations = (await readdir(join(cwd(), "prisma/migrations"))).filter((entry) => /^\d{14}_/.test(entry)).sort();
+  assert.deepEqual(migrations.slice(-2), [
+    "20261024120000_payment_backed_doctor_payouts",
+    "20261024130000_remove_legacy_credit_system",
   ]);
 });
 
-test("premium plan adds 24 credits to the existing Prisma balance", async () => {
-  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "premium" });
-  const result = await checkAndAllocateCredits();
-  assert.equal(result.success, true);
-  assert.equal(result.allocated, true);
-  assert.equal(result.monthlyCredits, 24);
-  assert.equal(result.balance, 26);
-  assert.equal(state.user.credits, 26);
-  assert.equal(state.transactions.length, 1);
-  assert.equal(state.transactions[0].amount, 24);
-});
-
-test("calling the allocator twice for the same plan grants only once", async () => {
-  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "standard" });
-  await checkAndAllocateCredits();
-  await checkAndAllocateCredits();
-  assert.equal(state.user.credits, 12);
-  assert.equal(state.transactions.length, 1);
-});
-
-for (const [initialPlan, changedPlan] of [["standard", "premium"], ["premium", "standard"]]) {
-  test(`${initialPlan.toUpperCase()} to ${changedPlan.toUpperCase()} in the same month grants no second allocation`, async () => {
-    const { checkAndAllocateCredits, state, setPlan } = await createAllocator({ plan: initialPlan });
-    await checkAndAllocateCredits();
-    const balanceAfterFirstAllocation = state.user.credits;
-    const transactionAfterFirstAllocation = structuredClone(state.transactions);
-    setPlan(changedPlan);
-    await checkAndAllocateCredits();
-    assert.equal(state.user.credits, balanceAfterFirstAllocation);
-    assert.deepEqual(state.transactions, transactionAfterFirstAllocation);
-  });
-}
-
-test("a new calendar month permits a new allocation", async () => {
-  const { checkAndAllocateCredits, state } = await createAllocator({
-    plan: "premium",
-    historical: [monthlyEntry("standard", monthKey(-1))],
-  });
-  await checkAndAllocateCredits();
-  assert.equal(state.user.credits, 26);
-  assert.deepEqual(state.transactions.map((entry) => entry.allocationKey), [
-    `user-1:standard:${monthKey(-1)}`,
-    `user-1:monthly:${monthKey()}`,
+test("payment-backed payout cancellation, reservation and admin transfer resolution remain wired", async () => {
+  const [payout, admin, paymentUi] = await Promise.all([
+    read("actions/payout.js"), read("actions/admin.js"), read("lib/payment-payouts.mjs"),
   ]);
+  assert.match(payout, /requestPaymentPayout/);
+  assert.match(payout, /reservePaymentCollections/);
+  assert.match(payout, /cancelPaymentPayoutRequest/);
+  assert.match(admin, /resolvePaymentPayoutOutcomeAction/);
+  assert.match(admin, /recordPaymentPayoutTransferAction/);
+  assert.match(paymentUi, /payoutPaymentAllocation/);
 });
-
-test("a historical plan-specific allocation this month remains untouched and prevents a second grant", async () => {
-  const historical = monthlyEntry("standard");
-  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "premium", historical: [historical] });
-  const before = structuredClone(state);
-  await checkAndAllocateCredits();
-  assert.deepEqual(state, before);
-});
-
-test("an unsupported or unresolved Clerk plan returns a clear result without changing credits", async () => {
-  const { checkAndAllocateCredits, state } = await createAllocator({ plan: "unconfigured-plan" });
-  const result = await checkAndAllocateCredits();
-  assert.equal(result.success, false);
-  assert.equal(result.code, "PLAN_NOT_RESOLVED");
-  assert.match(result.message, /Clerk has not confirmed a supported credit plan/);
-  assert.equal(state.user.credits, 2);
-  assert.equal(state.transactions.length, 0);
-});
-
-test("a Clerk entitlement lookup error returns a clear result", async () => {
-  const { checkAndAllocateCredits } = await createAllocator({ planError: true });
-  const result = await checkAndAllocateCredits();
-  assert.equal(result.success, false);
-  assert.equal(result.code, "PLAN_LOOKUP_FAILED");
-  assert.match(result.message, /couldn't verify your Clerk subscription/);
-});
-

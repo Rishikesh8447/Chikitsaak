@@ -70,7 +70,7 @@ export async function searchDoctors({ query = "", specialty = "", city = "", sta
   const doctorIds = doctors.map((doctor) => doctor.id);
   const [availability, appointments] = await Promise.all([
     db.availability.findMany({ where: { doctorId: { in: doctorIds }, status: "AVAILABLE" } }),
-    db.appointment.findMany({ where: { doctorId: { in: doctorIds }, status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] }, startTime: { lt: lastDay }, endTime: { gt: firstDay } }, select: { doctorId: true, startTime: true, endTime: true } }),
+    db.appointment.findMany({ where: { doctorId: { in: doctorIds }, OR: [{ status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: now } }], startTime: { lt: lastDay }, endTime: { gt: firstDay } }, select: { doctorId: true, startTime: true, endTime: true } }),
   ]);
   const available = doctors.filter((doctor) => {
     const windows = availability.filter((window) => window.doctorId === doctor.id && (window.dayOfWeek === null || window.dayOfWeek === now.getDay()) && (!window.blockedDate || format(new Date(window.blockedDate), "yyyy-MM-dd") !== format(now, "yyyy-MM-dd")));

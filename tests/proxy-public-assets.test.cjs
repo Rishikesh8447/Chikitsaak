@@ -42,10 +42,10 @@ test("manifest icon URLs exist and protected routes remain matched", async () =>
     '"/doctor(.*)"',
     '"/admin(.*)"',
     '"/appointments(.*)"',
-    '"/credits(.*)"',
     '"/medical-records(.*)"',
     '"/laboratory(.*)"',
   ]) {
     assert.ok(proxy.includes(route), `protected route should remain matched: ${route}`);
   }
+  assert.doesNotMatch(proxy, /\/credits/);
 });

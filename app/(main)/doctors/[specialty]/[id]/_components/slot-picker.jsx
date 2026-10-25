@@ -8,7 +8,7 @@ import { Clock, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { groupSlotsByLocalDate, parseLocalCalendarDate } from "@/lib/appointment-time.mjs";
 
-export function SlotPicker({ days, onSelectSlot }) {
+export function SlotPicker({ days, onSelectSlot, priceRupees }) {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const localDays = groupSlotsByLocalDate(days);
 
@@ -29,7 +29,7 @@ export function SlotPicker({ days, onSelectSlot }) {
 
   return (
     <section aria-label="Choose appointment time" className="space-y-6">
-      <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground"><span className="font-medium">Consultation cost: 2 credits</span><span className="ml-2 text-muted-foreground">Choose a day and a 20-minute time.</span></div>
+      <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground"><span className="font-medium">Consultation cost: {Number.isInteger(priceRupees) ? `₹${priceRupees}` : "Price not set"}</span><span className="ml-2 text-muted-foreground">Choose a day and a 20-minute time.</span></div>
       <Tabs
         defaultValue={activeTab}
         onValueChange={setActiveTab}

@@ -10,13 +10,12 @@ const initialEnd = new Date("2035-06-01T10:20:00.000Z");
 const newStart = new Date("2035-06-01T11:00:00.000Z");
 const newEnd = new Date("2035-06-01T11:20:00.000Z");
 
-async function loadAction({ verificationStatus = "VERIFIED", ownerId = "patient-1", available = true } = {}) {
+async function loadAction({ verificationStatus = "VERIFIED", ownerId = "patient-1", available = true, consultationMode = "ONLINE", payment = null } = {}) {
   const source = await sourcePromise;
   const appointmentTime = await import("../lib/appointment-time.mjs");
   const state = {
-    appointment: { id: "appointment-1", patientId: ownerId, doctorId: "doctor-1", status: "CONFIRMED", startTime: initialStart, endTime: initialEnd },
+    appointment: { id: "appointment-1", patientId: ownerId, doctorId: "doctor-1", status: "CONFIRMED", startTime: initialStart, endTime: initialEnd, consultationMode, payment },
     reminders: [{ appointmentId: "appointment-1" }],
-    credits: { patient: 8, doctor: 10 },
     ledger: [{ userId: "patient-1", amount: -2 }, { userId: "doctor-1", amount: 2 }],
     doctorQueries: [], reminderDeletes: 0,
   };
@@ -46,7 +45,12 @@ async function loadAction({ verificationStatus = "VERIFIED", ownerId = "patient-
   };
   const dependencies = {
     auth: async () => ({ userId: "clerk-user" }),
-    db: { $transaction: (work) => work(tx) },
+    measureServerTiming: async (_label, operation) => operation(),
+    db: {
+      $transaction: (work) => work(tx),
+      user: { findUnique: async () => ({ id: "patient-1", role: "PATIENT" }) },
+      appointment: { findUnique: async () => structuredClone(state.appointment) },
+    },
     revalidatePath: () => {},
     createAppointmentNotificationPair: async () => {},
     ...appointmentTime,
@@ -62,19 +66,25 @@ async function loadAction({ verificationStatus = "VERIFIED", ownerId = "patient-
     .replace('import { createAppointmentNotificationPair } from "@/lib/notifications";', "const { createAppointmentNotificationPair } = dependencies;")
     .replace('import { resolveDoctorPublicNames } from "@/lib/doctor-name";', "const resolveDoctorPublicNames = async () => [];")
     .replace('import { getVideoJoinWindowError } from "@/lib/appointment-time.mjs";', "const { getVideoJoinWindowError } = dependencies;")
+    .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const { measureServerTiming } = dependencies;")
     .replace("export async function bookAppointment", "async function bookAppointment")
     .replace("export async function authorizeVideoCall", "async function authorizeVideoCall")
     .replace("export async function getVideoCallCredentials", "async function getVideoCallCredentials")
     .replace("export async function getDoctorById", "async function getDoctorById")
     .replace("export async function getAvailableTimeSlots", "async function getAvailableTimeSlots")
     .replace("export async function rescheduleAppointment", "async function rescheduleAppointment")
-    .concat("\nreturn { rescheduleAppointment };");
+    .concat("\nreturn { authorizeVideoCall, rescheduleAppointment };");
   return { ...new Function("dependencies", transformed)(dependencies), state };
 }
 
 function form({ patientId = "patient-1", startTime = newStart, endTime = newEnd } = {}) {
   return new Map([['appointmentId', 'appointment-1'], ['startTime', startTime.toISOString()], ['endTime', endTime.toISOString()], ['patientId', patientId]]);
 }
+
+test("offline appointments cannot authorize a video call", async () => {
+  const { authorizeVideoCall } = await loadAction({ consultationMode: "OFFLINE" });
+  await assert.rejects(authorizeVideoCall(new Map([["appointmentId", "appointment-1"]])), /This is an in-person appointment/);
+});
 
 test("verified doctor and appointment owner can reschedule to a valid available slot", async () => {
   const { rescheduleAppointment, state } = await loadAction();
@@ -86,12 +96,41 @@ test("verified doctor and appointment owner can reschedule to a valid available 
   assert.deepEqual(state.doctorQueries[0], { id: "doctor-1", role: "DOCTOR", verificationStatus: "VERIFIED" });
 });
 
+for (const [label, consultationMode, payment] of [
+  ["verified online payment", "ONLINE", { method: "ONLINE", status: "PAID", verifiedAt: new Date(), refundStatus: "NOT_REQUIRED", cashCollection: null }],
+  ["verified offline UPI payment", "OFFLINE", { method: "UPI_QR", status: "PAID", verifiedAt: new Date(), refundStatus: "NOT_REQUIRED", cashCollection: null }],
+  ["cash due", "OFFLINE", { method: "CASH", status: "CASH_DUE", verifiedAt: null, refundStatus: "NOT_REQUIRED", cashCollection: null }],
+  ["audited cash collection", "OFFLINE", { method: "CASH", status: "PAID", verifiedAt: new Date(), refundStatus: "NOT_REQUIRED", cashCollection: { paymentId: "payment-1" } }],
+]) {
+  test(`${label} appointment remains eligible for rescheduling`, async () => {
+    const { rescheduleAppointment, state } = await loadAction({ consultationMode, payment });
+    const result = await rescheduleAppointment(form());
+    assert.equal(result.success, true);
+    assert.equal(state.appointment.payment.status, payment.status);
+    assert.equal(state.appointment.payment.cashCollection?.paymentId, payment.cashCollection?.paymentId);
+  });
+}
+
+for (const [label, consultationMode, payment] of [
+  ["unpaid online", "ONLINE", { method: "ONLINE", status: "PENDING", verifiedAt: null, refundStatus: "NOT_REQUIRED", cashCollection: null }],
+  ["pending offline UPI", "OFFLINE", { method: "UPI_QR", status: "PENDING", verifiedAt: null, refundStatus: "NOT_REQUIRED", cashCollection: null }],
+  ["refund-review", "ONLINE", { method: "ONLINE", status: "PAID", verifiedAt: new Date(), refundStatus: "REVIEW_REQUIRED", cashCollection: null }],
+]) {
+  test(`${label} payment blocks rescheduling without side effects`, async () => {
+    const { rescheduleAppointment, state } = await loadAction({ consultationMode, payment });
+    const before = structuredClone(state.appointment);
+    await assert.rejects(rescheduleAppointment(form()), /payment state does not permit rescheduling/);
+    assert.deepEqual(state.appointment, before);
+    assert.equal(state.reminderDeletes, 0);
+  });
+}
+
 for (const verificationStatus of ["PENDING", "REJECTED"]) {
   test(`${verificationStatus} doctor blocks rescheduling without side effects`, async () => {
     const { rescheduleAppointment, state } = await loadAction({ verificationStatus });
-    const before = structuredClone({ appointment: state.appointment, reminders: state.reminders, credits: state.credits, ledger: state.ledger });
+    const before = structuredClone({ appointment: state.appointment, reminders: state.reminders, ledger: state.ledger });
     await assert.rejects(rescheduleAppointment(form()), /Doctor not found or not verified/);
-    assert.deepEqual({ appointment: state.appointment, reminders: state.reminders, credits: state.credits, ledger: state.ledger }, before);
+    assert.deepEqual({ appointment: state.appointment, reminders: state.reminders, ledger: state.ledger }, before);
     assert.equal(state.reminderDeletes, 0);
   });
 }

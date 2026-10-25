@@ -1,22 +1,10 @@
 import { ClerkProvider } from "@clerk/nextjs";
-import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import CreditSync from "@/components/credit-sync";
 import "./globals.css";
 import Header from "@/components/header"
 import { checkUser } from "@/lib/checkUser";
 import { Toaster } from "sonner";
 import ServiceWorkerRegistration from "@/components/service-worker-registration";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata = {
   title: "Chikitsaak — Care, Connected",
@@ -38,7 +26,7 @@ export default async function RootLayout({ children }) {
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className="antialiased">
         <ClerkProvider>
           <ThemeProvider
             attribute="class"
@@ -50,7 +38,6 @@ export default async function RootLayout({ children }) {
 
             <Header user={user} />
             <ServiceWorkerRegistration />
-            <CreditSync user={user} />
             <div className="min-h-screen">
               {children}
             </div>

@@ -2,165 +2,94 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const cancellationModule = import("../lib/appointment-cancellation.mjs");
 
-function createDatabase(seed) {
-  let state = structuredClone(seed);
-  return {
-    get state() {
-      return structuredClone(state);
-    },
-    async $transaction(work) {
-      const draft = structuredClone(state);
-      const tx = {
-        appointment: {
-          findUnique: async ({ where }) => structuredClone(draft.appointments.find((item) => item.id === where.id) || null),
-          updateMany: async ({ where, data }) => {
-            const appointment = draft.appointments.find((item) => item.id === where.id && item.status === where.status);
-            if (!appointment) return { count: 0 };
-            Object.assign(appointment, data);
-            return { count: 1 };
-          },
-        },
-        user: {
-          findUnique: async ({ where }) => structuredClone(draft.users.find((item) => item.id === where.id) || null),
-          update: async ({ where, data }) => {
-            const user = draft.users.find((item) => item.id === where.id);
-            if (!user) throw new Error("User not found");
-            if (data.credits?.increment !== undefined) user.credits += data.credits.increment;
-            return structuredClone(user);
-          },
-          updateMany: async ({ where, data }) => {
-            const user = draft.users.find((item) => item.id === where.id && item.credits >= where.credits.gte);
-            if (!user) return { count: 0 };
-            user.credits -= data.credits.decrement;
-            return { count: 1 };
-          },
-        },
-        payout: {
-          findFirst: async ({ where }) => structuredClone(draft.payouts.find((item) => item.doctorId === where.doctorId && item.status === where.status) || null),
-        },
-        creditTransaction: {
-          findUnique: async ({ where }) => structuredClone(draft.transactions.find((item) => item.allocationKey === where.allocationKey) || null),
-          create: async ({ data }) => {
-            if (draft.transactions.some((item) => item.allocationKey === data.allocationKey)) {
-              const error = new Error("Unique allocation key");
-              error.code = "P2002";
-              throw error;
-            }
-            draft.transactions.push(structuredClone(data));
-            return data;
-          },
-        },
-        notification: {
-          createMany: async ({ data, skipDuplicates }) => {
-            let count = 0;
-            for (const notification of data) {
-              if (skipDuplicates && draft.notifications.some((item) => item.dedupeKey === notification.dedupeKey)) continue;
-              draft.notifications.push(structuredClone(notification));
-              count += 1;
-            }
-            return { count };
-          },
-        },
-      };
-      const result = await work(tx);
-      state = draft;
-      return result;
-    },
-  };
-}
-
-function seed({ doctorCredits = 2, payouts = [], extraTransactions = [] } = {}) {
-  return {
-    appointments: [{ id: "appointment-1", patientId: "patient-1", doctorId: "doctor-1", status: "SCHEDULED" }],
-    users: [
-      { id: "patient-1", credits: 8 },
-      { id: "doctor-1", credits: doctorCredits },
-    ],
-    payouts: structuredClone(payouts),
-    transactions: [
-      { userId: "patient-1", amount: -2, type: "APPOINTMENT_DEDUCTION", allocationKey: "appointment:appointment-1:patient-debit" },
-      { userId: "doctor-1", amount: 2, type: "APPOINTMENT_DEDUCTION", allocationKey: "appointment:appointment-1:doctor-credit" },
-      ...structuredClone(extraTransactions),
-    ],
+function createDatabase({ appointmentStatus = "SCHEDULED", payment = null, paymentUpdateCount = 1 } = {}) {
+  const state = {
+    appointment: { id: "appointment-1", patientId: "patient-1", doctorId: "doctor-1", status: appointmentStatus },
+    payment: payment && { appointmentId: "appointment-1", ...payment },
     notifications: [],
   };
+  const tx = {
+    appointment: {
+      findUnique: async () => structuredClone(state.appointment),
+      updateMany: async ({ where, data }) => {
+        if (state.appointment.status !== where.status) return { count: 0 };
+        Object.assign(state.appointment, data);
+        return { count: 1 };
+      },
+    },
+    appointmentPayment: {
+      findUnique: async () => structuredClone(state.payment),
+      updateMany: async ({ where, data }) => {
+        if (!state.payment || state.payment.status !== where.status || (where.refundStatus && state.payment.refundStatus !== where.refundStatus)) return { count: 0 };
+        if (where.refundStatus && paymentUpdateCount !== 1) return { count: paymentUpdateCount };
+        Object.assign(state.payment, data);
+        return { count: 1 };
+      },
+    },
+    payoutPaymentAllocation: { findMany: async () => [] },
+    payout: { updateMany: async () => ({ count: 0 }) },
+    notification: { createMany: async ({ data }) => { state.notifications.push(...data); return { count: data.length }; } },
+  };
+  return {
+    state,
+    async cancel(actorId = "patient-1") {
+      const { cancelAppointmentInTransaction } = await cancellationModule;
+      return cancelAppointmentInTransaction(tx, {
+        appointmentId: "appointment-1",
+        actorId,
+        notify: (transaction, appointment) => transaction.notification.createMany({ data: [
+          { userId: appointment.patientId, dedupeKey: `appointment:${appointment.id}:cancelled:patient` },
+          { userId: appointment.doctorId, dedupeKey: `appointment:${appointment.id}:cancelled:doctor` },
+        ], skipDuplicates: true }),
+      });
+    },
+  };
 }
 
-async function cancel(db, actorId = "patient-1") {
-  const { cancelAppointmentInTransaction } = await cancellationModule;
-  return db.$transaction((tx) => cancelAppointmentInTransaction(tx, {
-    appointmentId: "appointment-1",
-    actorId,
-    notify: (transaction, appointment) => transaction.notification.createMany({
-      data: [
-        { userId: appointment.patientId, dedupeKey: `appointment:${appointment.id}:cancelled:patient` },
-        { userId: appointment.doctorId, dedupeKey: `appointment:${appointment.id}:cancelled:doctor` },
-      ],
-      skipDuplicates: true,
-    }),
-  }));
-}
-
-test("cancellation refunds the patient and reverses the doctor's available appointment credits", async () => {
-  const db = createDatabase(seed());
-
-  await cancel(db);
-
-  const state = db.state;
-  assert.equal(state.appointments[0].status, "CANCELLED");
-  assert.equal(state.users.find((user) => user.id === "patient-1").credits, 10);
-  assert.equal(state.users.find((user) => user.id === "doctor-1").credits, 0);
-  assert.deepEqual(state.transactions.slice(-2).map(({ userId, amount, type }) => ({ userId, amount, type })), [
-    { userId: "patient-1", amount: 2, type: "APPOINTMENT_REFUND" },
-    { userId: "doctor-1", amount: -2, type: "APPOINTMENT_REFUND" },
-  ]);
+test("unpaid appointment cancellation changes status and notifies participants without credit accounting", async () => {
+  const db = createDatabase();
+  await db.cancel();
+  assert.equal(db.state.appointment.status, "CANCELLED");
+  assert.equal(db.state.notifications.length, 2);
+  assert.equal("credits" in db.state, false);
 });
 
-test("cancellation rolls back when a pending payout leaves fewer than two available credits", async () => {
+test("paid appointment cancellation flags refund review and preserves collected payment status", async () => {
+  const db = createDatabase({ payment: { id: "payment-1", status: "PAID", refundStatus: "NOT_REQUIRED" } });
+  await db.cancel();
+  assert.equal(db.state.appointment.status, "CANCELLED");
+  assert.equal(db.state.payment.status, "PAID");
+  assert.equal(db.state.payment.refundStatus, "REVIEW_REQUIRED");
+  assert.equal(db.state.notifications.length, 2);
+});
+
+test("paid appointment cancellation aborts if refund review could not be recorded", async () => {
+  const db = createDatabase({ payment: { id: "payment-1", status: "PAID", refundStatus: "NOT_REQUIRED" }, paymentUpdateCount: 0 });
+  await assert.rejects(db.cancel(), /cannot be cancelled/);
+  assert.equal(db.state.payment.refundStatus, "NOT_REQUIRED");
+});
+
+test("cancelling pending checkout expires payment and clears the appointment hold", async () => {
+  const db = createDatabase({ appointmentStatus: "PAYMENT_PENDING", payment: { id: "payment-1", status: "PENDING", orderStatus: "CREATED" } });
+  db.state.appointment.checkoutExpiresAt = new Date(Date.now() + 60000);
+  await db.cancel();
+  assert.equal(db.state.appointment.status, "CANCELLED");
+  assert.equal(db.state.appointment.checkoutExpiresAt, null);
+  assert.equal(db.state.payment.status, "EXPIRED");
+  assert.equal(db.state.payment.orderStatus, "EXPIRED");
+});
+
+test("cancelling cash-due appointment cancels only the unpaid cash obligation", async () => {
+  const db = createDatabase({ payment: { id: "payment-1", status: "CASH_DUE", method: "CASH" } });
+  await db.cancel();
+  assert.equal(db.state.appointment.status, "CANCELLED");
+  assert.equal(db.state.payment.status, "CANCELLED");
+});
+
+test("cancellation remains authorized and rejects invalid/repeated transitions", async () => {
   const { CANCELLATION_ERRORS } = await cancellationModule;
-  const payout = { id: "payout-1", doctorId: "doctor-1", credits: 4, amount: 40, status: "PROCESSING" };
-  const db = createDatabase(seed({
-    doctorCredits: 1,
-    payouts: [payout],
-    extraTransactions: [{ userId: "doctor-1", amount: -4, type: "ADMIN_ADJUSTMENT", allocationKey: "payout:payout-1:credit-reservation" }],
-  }));
-  const before = db.state;
-
-  await assert.rejects(cancel(db), new Error(CANCELLATION_ERRORS.PAYOUT_RESERVED));
-
-  assert.deepEqual(db.state, before);
-  assert.equal(db.state.users.find((user) => user.id === "doctor-1").credits, 1);
-  assert.equal(db.state.payouts[0].status, "PROCESSING");
-  assert.equal(db.state.payouts[0].credits, 4);
-  assert.equal(db.state.users.find((user) => user.id === "patient-1").credits, 8);
-});
-
-test("cancellation after payout processing does not alter the processed payout", async () => {
-  const payout = { id: "payout-1", doctorId: "doctor-1", credits: 4, amount: 40, netAmount: 32, status: "PROCESSED" };
-  const db = createDatabase(seed({
-    doctorCredits: 2,
-    payouts: [payout],
-    extraTransactions: [{ userId: "doctor-1", amount: -4, type: "ADMIN_ADJUSTMENT", allocationKey: "payout:payout-1:credit-reservation" }],
-  }));
-
-  await cancel(db);
-
-  const state = db.state;
-  assert.equal(state.appointments[0].status, "CANCELLED");
-  assert.equal(state.users.find((user) => user.id === "patient-1").credits, 10);
-  assert.equal(state.users.find((user) => user.id === "doctor-1").credits, 0);
-  assert.deepEqual(state.payouts[0], payout);
-  assert.equal(state.transactions.filter((item) => item.allocationKey === "payout:payout-1:credit-reservation").length, 1);
-});
-
-test("repeated cancellation does not create duplicate refunds", async () => {
-  const { CANCELLATION_ERRORS } = await cancellationModule;
-  const db = createDatabase(seed());
-  await cancel(db);
-  const afterFirstCancellation = db.state;
-
-  await assert.rejects(cancel(db), new Error(CANCELLATION_ERRORS.NOT_CANCELLABLE));
-
-  assert.deepEqual(db.state, afterFirstCancellation);
-  assert.equal(db.state.transactions.filter((item) => item.type === "APPOINTMENT_REFUND").length, 2);
+  const unauthorized = createDatabase();
+  await assert.rejects(unauthorized.cancel("other-user"), /not authorized/);
+  const cancelled = createDatabase({ appointmentStatus: "CANCELLED" });
+  await assert.rejects(cancelled.cancel(), new Error(CANCELLATION_ERRORS.NOT_CANCELLABLE));
 });

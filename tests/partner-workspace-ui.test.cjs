@@ -13,8 +13,13 @@ test("partner header navigation is derived from active organization memberships"
   assert.match(header, /isLaboratoryPartner \? \[/);
   assert.match(header, /isPharmacyPartner \? \[/);
   assert.match(header, /isPartner \? \[/);
-  assert.match(header, /user\?\.role === "PATIENT" && <Link href="\/credits"/);
-  assert.match(header, /user\?\.role !== "ADMIN" && !isPartner/);
+  const patientLinks = header.match(/PATIENT:\s*\[([\s\S]*?)\n  \],/);
+  const doctorLinks = header.match(/DOCTOR:\s*\[([\s\S]*?)\n  \],/);
+  assert.ok(patientLinks);
+  assert.match(patientLinks[1], /href: "\/pharmacy\/workspace", label: "Pharmacy"/);
+  assert.ok(doctorLinks);
+  assert.doesNotMatch(doctorLinks[1], /pharmacy\/workspace|Pharmacy partner/);
+  assert.match(header, /ADMIN: \[\{ href: "\/admin", label: "Administration"/);
   for (const link of ["Test offerings", "Assigned orders", "Product catalogue", "Requests & orders", "Organization"]) {
     assert.ok(header.includes(link), `missing partner link: ${link}`);
   }

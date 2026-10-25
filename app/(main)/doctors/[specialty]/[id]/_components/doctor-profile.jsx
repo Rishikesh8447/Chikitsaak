@@ -209,6 +209,7 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
                     {!selectedSlot && (
                       <SlotPicker
                         days={availableDays}
+                        priceRupees={doctor.consultationPriceRupees}
                         onSelectSlot={handleSlotSelect}
                       />
                     )}
@@ -218,6 +219,7 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
                       <AppointmentForm
                         doctorId={doctor.id}
                         slot={selectedSlot}
+                        priceRupees={doctor.consultationPriceRupees}
                         onBack={() => setSelectedSlot(null)}
                         onComplete={handleBookingComplete}
                       />

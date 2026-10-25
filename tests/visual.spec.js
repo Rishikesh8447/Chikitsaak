@@ -95,10 +95,6 @@ test.describe("patient visual regressions", () => {
     await expectVisualSnapshot(page, "/appointments", "appointments");
   });
 
-  test("credits visual regression", async ({ page }) => {
-    await expectVisualSnapshot(page, "/credits", "credits");
-  });
-
   test("medical records visual regression", async ({ page }) => {
     await expectVisualSnapshot(page, "/medical-records", "medical-records");
   });
