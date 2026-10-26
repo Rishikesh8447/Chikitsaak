@@ -75,6 +75,7 @@ export function AppointmentCard({
     loading: tokenLoading,
     fn: submitTokenRequest,
     data: tokenData,
+    error: tokenError,
   } = useFetch(authorizeVideoCall);
   const {
     loading: completeLoading,
@@ -271,7 +272,11 @@ export function AppointmentCard({
 
     const formData = new FormData();
     formData.append("appointmentId", appointment.id);
-    await submitTokenRequest(formData);
+    try {
+      await submitTokenRequest(formData);
+    } catch {
+      setAction(null);
+    }
   };
 
   // Handle successful operations
@@ -314,10 +319,10 @@ export function AppointmentCard({
   useEffect(() => {
     if (tokenData?.success) {
       router.push(`/video-call?appointmentId=${encodeURIComponent(appointment.id)}`);
-    } else if (tokenData?.error) {
+    } else if (tokenData?.error || tokenError) {
       setAction(null);
     }
-  }, [tokenData, appointment.id, router]);
+  }, [tokenData, tokenError, appointment.id, router]);
 
   useEffect(() => {
     if (statusData?.success && handledStatusResult.current !== statusData) {

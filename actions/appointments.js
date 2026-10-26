@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
@@ -54,6 +54,14 @@ function logVideoProvisioningFailure(operation, error) {
   });
 }
 
+function formatVonageApplicationId(value) {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, "") : "";
+}
+
+function formatVonagePrivateKey(value) {
+  return typeof value === "string" ? value.trim().replace(/\\n/g, "\n") : "";
+}
+
 // Initialize Vonage Video API client
 let vonage;
 function getVonage() {
@@ -65,7 +73,7 @@ function getVonage() {
       missingVariables,
     });
   }
-  vonage = new Vonage(new Auth({ applicationId: process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID, privateKey: process.env.VONAGE_PRIVATE_KEY.replace(/\\n/g, "\n") }), {});
+  vonage = new Vonage(new Auth({ applicationId: formatVonageApplicationId(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID), privateKey: formatVonagePrivateKey(process.env.VONAGE_PRIVATE_KEY) }), {});
   return vonage;
 }
 
@@ -183,7 +191,7 @@ export async function authorizeVideoCall(formData) {
     }
     return { success: true };
   } catch (error) {
-    throw new Error(error instanceof Error && ["Unauthorized", "User not found", "Appointment ID is required", "Appointment not found", "You are not authorized to join this call", "This is an in-person appointment", "Waiting for doctor confirmation", "This appointment is not available for video consultation", "The call will be available 30 minutes before the scheduled time", "Video session provisioning failed", "Video session could not be saved"].includes(error.message) ? error.message : "Unable to authorize video call. Please try again.");
+    throw new Error(error instanceof Error && ["Unauthorized", "User not found", "Appointment ID is required", "Appointment not found", "You are not authorized to join this call", "This is an in-person appointment", "Waiting for doctor confirmation", "Doctor verification is required to join calls", "This appointment is not available for video consultation", "The call will be available 30 minutes before the scheduled time", "This appointment has ended", "Video session provisioning failed", "Video session could not be saved"].includes(error.message) ? error.message : "Unable to authorize video call. Please try again.");
   }
 }
 
@@ -211,7 +219,7 @@ export async function getVideoCallCredentials(appointmentId) {
     logVideoProvisioningFailure("generateClientToken", error);
     throw new Error("Video call authorization failed");
   }
-  return { success: true, videoSessionId: sessionId, token, appId: process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID };
+  return { success: true, videoSessionId: sessionId, token, appId: formatVonageApplicationId(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID) };
 }
 
 /**
