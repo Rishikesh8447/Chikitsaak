@@ -22,6 +22,52 @@ export async function updateConsultationPrice(formData) {
   return { success: true, consultationPriceRupees };
 }
 
+function parseIntervalsFromFormData(formData) {
+  const intervalsRaw = formData.get("intervals");
+  if (intervalsRaw) {
+    try {
+      const parsed = typeof intervalsRaw === "string" ? JSON.parse(intervalsRaw) : intervalsRaw;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((item) => ({
+          start: new Date(item.startTime),
+          end: new Date(item.endTime),
+        }));
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  const startTime = formData.get("startTime");
+  const endTime = formData.get("endTime");
+  if (!startTime || !endTime) return null;
+  return [{ start: new Date(startTime), end: new Date(endTime) }];
+}
+
+function validateAndSortIntervals(intervals) {
+  if (!intervals || intervals.length === 0) {
+    return { valid: false, error: "Start time and end time are required" };
+  }
+  for (const interval of intervals) {
+    if (Number.isNaN(interval.start.getTime()) || Number.isNaN(interval.end.getTime()) || interval.start >= interval.end) {
+      return { valid: false, error: "Start time must be before end time" };
+    }
+  }
+  const sorted = [...intervals].sort((a, b) => {
+    const aM = a.start.getHours() * 60 + a.start.getMinutes();
+    const bM = b.start.getHours() * 60 + b.start.getMinutes();
+    return aM - bM;
+  });
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const currentEndM = sorted[i].end.getHours() * 60 + sorted[i].end.getMinutes();
+    const nextStartM = sorted[i + 1].start.getHours() * 60 + sorted[i + 1].start.getMinutes();
+    if (currentEndM > nextStartM) {
+      return { valid: false, error: "Intervals cannot overlap each other" };
+    }
+  }
+  return { valid: true, intervals: sorted };
+}
+
 /**
  * Set doctor's availability slots
  */
@@ -29,11 +75,10 @@ export async function setAvailabilitySlots(formData) {
   const { userId } = await auth();
 
   if (!userId) {
-    throw new Error("Unauthorized");
+    return { success: false, error: "Unauthorized" };
   }
 
   try {
-    // Get the doctor
     const doctor = await db.user.findUnique({
       where: {
         clerkUserId: userId,
@@ -43,55 +88,319 @@ export async function setAvailabilitySlots(formData) {
     });
 
     if (!doctor) {
-      throw new Error("Doctor not found");
+      return { success: false, error: "Doctor not found or not verified" };
     }
 
-    // Get form data
-    const startTime = formData.get("startTime");
-    const endTime = formData.get("endTime");
-
-    // Validate input
-    if (!startTime || !endTime) {
-      throw new Error("Start time and end time are required");
+    const rawIntervals = parseIntervalsFromFormData(formData);
+    const validation = validateAndSortIntervals(rawIntervals);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
     }
+    const intervals = validation.intervals;
 
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
-      throw new Error("Start time must be before end time");
-    }
     const dayOfWeekValue = formData.get("dayOfWeek");
-    const dayOfWeek = dayOfWeekValue === null || dayOfWeekValue === "" ? null : Number(dayOfWeekValue);
-    if (dayOfWeek !== null && (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) throw new Error("Invalid day of week");
-    const newSlot = await db.$transaction(async (tx) => {
-      const existing = await tx.availability.findMany({ where: { doctorId: doctor.id, status: "AVAILABLE" } });
-      const startMinutes = start.getHours() * 60 + start.getMinutes();
-      const endMinutes = end.getHours() * 60 + end.getMinutes();
-      const overlaps = existing.some((slot) => {
-        const slotStart = new Date(slot.startTime).getHours() * 60 + new Date(slot.startTime).getMinutes();
-        const slotEnd = new Date(slot.endTime).getHours() * 60 + new Date(slot.endTime).getMinutes();
-        return (slot.dayOfWeek === null || dayOfWeek === null || slot.dayOfWeek === dayOfWeek) && slotStart < endMinutes && slotEnd > startMinutes;
+    const dayOfWeek = (dayOfWeekValue === undefined || dayOfWeekValue === null || dayOfWeekValue === "" || dayOfWeekValue === "all") ? null : Number(dayOfWeekValue);
+    if (dayOfWeek !== null && (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
+      return { success: false, error: "Invalid day of week" };
+    }
+
+    const blockedDateValue = formData.get("blockedDate");
+    let blockedDate = null;
+    if (blockedDateValue) {
+      blockedDate = new Date(blockedDateValue);
+      if (Number.isNaN(blockedDate.getTime())) {
+        return { success: false, error: "Invalid date" };
+      }
+    }
+
+    const statusValue = formData.get("status");
+    const status = statusValue === "BLOCKED" ? "BLOCKED" : "AVAILABLE";
+
+    const result = await db.$transaction(async (tx) => {
+      if (status === "AVAILABLE") {
+        const existing = await tx.availability.findMany({ where: { doctorId: doctor.id, status: "AVAILABLE" } });
+        for (const interval of intervals) {
+          const startMinutes = interval.start.getHours() * 60 + interval.start.getMinutes();
+          const endMinutes = interval.end.getHours() * 60 + interval.end.getMinutes();
+          const overlaps = existing.some((slot) => {
+            const scheduleMatch = slot.dayOfWeek === null || dayOfWeek === null || slot.dayOfWeek === dayOfWeek;
+            const dateMatch = (!slot.blockedDate && !blockedDate) ||
+              (slot.blockedDate && blockedDate && new Date(slot.blockedDate).toDateString() === blockedDate.toDateString());
+            if (!scheduleMatch || !dateMatch) return false;
+
+            const slotStart = new Date(slot.startTime).getHours() * 60 + new Date(slot.startTime).getMinutes();
+            const slotEnd = new Date(slot.endTime).getHours() * 60 + new Date(slot.endTime).getMinutes();
+            return slotStart < endMinutes && slotEnd > startMinutes;
+          });
+          if (overlaps) {
+            return { success: false, error: "This availability period overlaps an existing period" };
+          }
+        }
+      }
+
+      const appointments = await tx.appointment.findMany({
+        where: {
+          doctorId: doctor.id,
+          OR: [
+            { status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } },
+            { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } },
+          ],
+        },
+        select: { id: true, startTime: true, endTime: true },
       });
-      if (overlaps) throw new Error("This availability period overlaps an existing period");
-      const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, OR: [{ status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } }], startTime: { lt: end }, endTime: { gt: start } } });
-      const coversAppointment = (appointment) => {
-        const appointmentStart = new Date(appointment.startTime);
-        const appointmentEnd = new Date(appointment.endTime);
-        const appointmentStartMinutes = appointmentStart.getHours() * 60 + appointmentStart.getMinutes();
-        const appointmentEndMinutes = appointmentEnd.getHours() * 60 + appointmentEnd.getMinutes();
-        const withinWindow = startMinutes <= appointmentStartMinutes && endMinutes >= appointmentEndMinutes;
-        return withinWindow && appointmentStart >= start && appointmentEnd <= end;
-      };
-      if (!appointments.every(coversAppointment)) throw new Error("Availability cannot invalidate an existing appointment");
-      return tx.availability.create({ data: { doctorId: doctor.id, startTime: start, endTime: end, dayOfWeek, status: "AVAILABLE" } });
+
+      if (status === "BLOCKED") {
+        for (const interval of intervals) {
+          const startMinutes = interval.start.getHours() * 60 + interval.start.getMinutes();
+          const endMinutes = interval.end.getHours() * 60 + interval.end.getMinutes();
+          const hasConflict = appointments.some((appointment) => {
+            const apptStart = new Date(appointment.startTime);
+            const apptEnd = new Date(appointment.endTime);
+            if (dayOfWeek !== null && apptStart.getDay() !== dayOfWeek) return false;
+            if (blockedDate && apptStart.toDateString() !== blockedDate.toDateString()) return false;
+            const apptStartM = apptStart.getHours() * 60 + apptStart.getMinutes();
+            const apptEndM = apptEnd.getHours() * 60 + apptEnd.getMinutes();
+            return apptStartM < endMinutes && apptEndM > startMinutes;
+          });
+          if (hasConflict) {
+            return { success: false, error: "Cannot mark unavailable: you have booked appointments during this time." };
+          }
+        }
+      }
+
+      const createdSlots = [];
+      for (const interval of intervals) {
+        const slot = await tx.availability.create({
+          data: {
+            doctorId: doctor.id,
+            startTime: interval.start,
+            endTime: interval.end,
+            dayOfWeek,
+            status,
+            blockedDate,
+            isRecurring: !blockedDate,
+          },
+        });
+        createdSlots.push(slot);
+      }
+      return { success: true, slot: createdSlots[0], slots: createdSlots };
     }, { isolationLevel: "Serializable" });
 
+    if (!result.success) return result;
+
     revalidatePath("/doctor");
-    return { success: true, slot: newSlot };
+    return result;
   } catch (error) {
-    if (error instanceof Error && error.message === "Availability cannot invalidate an existing appointment") throw error;
     console.error("Failed to set availability slots:", error);
-    throw new Error("Failed to save availability. Please try again.");
+    return { success: false, error: error.message || "Failed to save availability. Please try again." };
+  }
+}
+
+/**
+ * Update an existing availability slot
+ */
+export async function updateAvailabilitySlot(formData) {
+  const { userId } = await auth();
+  if (!userId) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  try {
+    const doctor = await db.user.findUnique({
+      where: {
+        clerkUserId: userId,
+        role: "DOCTOR",
+        verificationStatus: "VERIFIED",
+      },
+    });
+
+    if (!doctor) {
+      return { success: false, error: "Doctor not found or not verified" };
+    }
+
+    const slotId = formData.get("slotId");
+    if (!slotId || typeof slotId !== "string") {
+      return { success: false, error: "Slot ID is required" };
+    }
+
+    const rawIntervals = parseIntervalsFromFormData(formData);
+    const validation = validateAndSortIntervals(rawIntervals);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+    const intervals = validation.intervals;
+
+    const dayOfWeekValue = formData.get("dayOfWeek");
+    const dayOfWeek = (dayOfWeekValue === undefined || dayOfWeekValue === null || dayOfWeekValue === "" || dayOfWeekValue === "all") ? null : Number(dayOfWeekValue);
+    if (dayOfWeek !== null && (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
+      return { success: false, error: "Invalid day of week" };
+    }
+
+    const blockedDateValue = formData.get("blockedDate");
+    let blockedDate = null;
+    if (blockedDateValue) {
+      blockedDate = new Date(blockedDateValue);
+      if (Number.isNaN(blockedDate.getTime())) {
+        return { success: false, error: "Invalid date" };
+      }
+    }
+
+    const statusValue = formData.get("status");
+    const status = statusValue === "BLOCKED" ? "BLOCKED" : "AVAILABLE";
+
+    const result = await db.$transaction(async (tx) => {
+      const existingSlot = await tx.availability.findFirst({
+        where: { id: slotId, doctorId: doctor.id },
+      });
+      if (!existingSlot) {
+        return { success: false, error: "Availability period not found" };
+      }
+
+      if (status === "AVAILABLE") {
+        const otherSlots = await tx.availability.findMany({
+          where: {
+            doctorId: doctor.id,
+            status: "AVAILABLE",
+            id: { not: slotId },
+          },
+        });
+
+        for (const interval of intervals) {
+          const startMinutes = interval.start.getHours() * 60 + interval.start.getMinutes();
+          const endMinutes = interval.end.getHours() * 60 + interval.end.getMinutes();
+          const overlaps = otherSlots.some((slot) => {
+            const scheduleMatch = slot.dayOfWeek === null || dayOfWeek === null || slot.dayOfWeek === dayOfWeek;
+            const dateMatch = (!slot.blockedDate && !blockedDate) ||
+              (slot.blockedDate && blockedDate && new Date(slot.blockedDate).toDateString() === blockedDate.toDateString());
+            if (!scheduleMatch || !dateMatch) return false;
+
+            const slotStart = new Date(slot.startTime).getHours() * 60 + new Date(slot.startTime).getMinutes();
+            const slotEnd = new Date(slot.endTime).getHours() * 60 + new Date(slot.endTime).getMinutes();
+            return slotStart < endMinutes && slotEnd > startMinutes;
+          });
+          if (overlaps) {
+            return { success: false, error: "This availability period overlaps an existing period" };
+          }
+        }
+      }
+
+      const appointments = await tx.appointment.findMany({
+        where: {
+          doctorId: doctor.id,
+          OR: [
+            { status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } },
+            { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } },
+          ],
+        },
+        select: { id: true, startTime: true, endTime: true },
+      });
+
+      if (status === "BLOCKED") {
+        for (const interval of intervals) {
+          const startMinutes = interval.start.getHours() * 60 + interval.start.getMinutes();
+          const endMinutes = interval.end.getHours() * 60 + interval.end.getMinutes();
+          const hasConflict = appointments.some((appointment) => {
+            const apptStart = new Date(appointment.startTime);
+            const apptEnd = new Date(appointment.endTime);
+            if (dayOfWeek !== null && apptStart.getDay() !== dayOfWeek) return false;
+            if (blockedDate && apptStart.toDateString() !== blockedDate.toDateString()) return false;
+            const apptStartM = apptStart.getHours() * 60 + apptStart.getMinutes();
+            const apptEndM = apptEnd.getHours() * 60 + apptEnd.getMinutes();
+            return apptStartM < endMinutes && apptEndM > startMinutes;
+          });
+          if (hasConflict) {
+            return { success: false, error: "Cannot mark unavailable: you have booked appointments during this time." };
+          }
+        }
+      } else {
+        for (const appointment of appointments) {
+          const apptStart = new Date(appointment.startTime);
+          const apptEnd = new Date(appointment.endTime);
+
+          const appliesToNewSchedule =
+            (dayOfWeek === null || apptStart.getDay() === dayOfWeek) &&
+            (!blockedDate || apptStart.toDateString() === blockedDate.toDateString());
+
+          const appliedToOldSlot =
+            (existingSlot.dayOfWeek === null || apptStart.getDay() === existingSlot.dayOfWeek) &&
+            (!existingSlot.blockedDate || apptStart.toDateString() === new Date(existingSlot.blockedDate).toDateString());
+
+          if (appliesToNewSchedule || appliedToOldSlot) {
+            const apptStartM = apptStart.getHours() * 60 + apptStart.getMinutes();
+            const apptEndM = apptEnd.getHours() * 60 + apptEnd.getMinutes();
+
+            const coveredByNewIntervals = appliesToNewSchedule && intervals.some((interval) => {
+              const iStartM = interval.start.getHours() * 60 + interval.start.getMinutes();
+              const iEndM = interval.end.getHours() * 60 + interval.end.getMinutes();
+              return iStartM <= apptStartM && iEndM >= apptEndM;
+            });
+
+            const otherSlots = await tx.availability.findMany({
+              where: {
+                doctorId: doctor.id,
+                status: "AVAILABLE",
+                id: { not: slotId },
+              },
+            });
+
+            const coveredByOtherSlots = otherSlots.some((slot) => {
+              const slotDayMatch = slot.dayOfWeek === null || apptStart.getDay() === slot.dayOfWeek;
+              const slotDateMatch = !slot.blockedDate || apptStart.toDateString() === new Date(slot.blockedDate).toDateString();
+              if (!slotDayMatch || !slotDateMatch) return false;
+              const sStartM = new Date(slot.startTime).getHours() * 60 + new Date(slot.startTime).getMinutes();
+              const sEndM = new Date(slot.endTime).getHours() * 60 + new Date(slot.endTime).getMinutes();
+              return sStartM <= apptStartM && sEndM >= apptEndM;
+            });
+
+            if (!coveredByNewIntervals && !coveredByOtherSlots) {
+              const timeStr = apptStart.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+              return {
+                success: false,
+                error: `Cannot change availability: you have a booked appointment at ${timeStr} that falls outside this new time range.`,
+              };
+            }
+          }
+        }
+      }
+
+      const updatedSlot = await tx.availability.update({
+        where: { id: slotId },
+        data: {
+          startTime: intervals[0].start,
+          endTime: intervals[0].end,
+          dayOfWeek,
+          status,
+          blockedDate,
+          isRecurring: !blockedDate,
+        },
+      });
+
+      const additionalSlots = [];
+      for (let i = 1; i < intervals.length; i++) {
+        const extraSlot = await tx.availability.create({
+          data: {
+            doctorId: doctor.id,
+            startTime: intervals[i].start,
+            endTime: intervals[i].end,
+            dayOfWeek,
+            status,
+            blockedDate,
+            isRecurring: !blockedDate,
+          },
+        });
+        additionalSlots.push(extraSlot);
+      }
+
+      return { success: true, slot: updatedSlot, additionalSlots };
+    }, { isolationLevel: "Serializable" });
+
+    if (!result.success) return result;
+
+    revalidatePath("/doctor");
+    return result;
+  } catch (error) {
+    console.error("Failed to update availability slot:", error);
+    return { success: false, error: error.message || "Failed to update availability. Please try again." };
   }
 }
 
@@ -102,7 +411,7 @@ export async function getDoctorAvailability() {
   const { userId } = await auth();
 
   if (!userId) {
-    throw new Error("Unauthorized");
+    return { success: false, slots: [], error: "Unauthorized" };
   }
 
   try {
@@ -115,7 +424,7 @@ export async function getDoctorAvailability() {
     });
 
     if (!doctor) {
-      throw new Error("Doctor not found");
+      return { success: false, slots: [], error: "Doctor not found" };
     }
 
     const availabilitySlots = await db.availability.findMany({
@@ -127,9 +436,10 @@ export async function getDoctorAvailability() {
       },
     });
 
-    return { slots: availabilitySlots };
+    return { success: true, slots: availabilitySlots };
   } catch (error) {
-    throw new Error("Failed to fetch availability slots. Please try again.");
+    console.error("Failed to fetch availability slots:", error);
+    return { success: false, slots: [], error: "Failed to fetch availability slots. Please try again." };
   }
 }
 
@@ -533,28 +843,55 @@ export async function recordCashAppointmentCollection(formData) {
 
 export async function removeAvailabilitySlot(formData) {
   const { userId } = await auth();
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) return { success: false, error: "Unauthorized" };
   const slotId = formData.get("slotId");
-  const doctor = await db.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
-  if (!doctor || typeof slotId !== "string") throw new Error("Invalid availability request");
-  await db.$transaction(async (tx) => {
-    const slot = await tx.availability.findUnique({ where: { id: slotId, doctorId: doctor.id } });
-    if (!slot) throw new Error("Availability period not found");
-    const appointments = await tx.appointment.findMany({ where: { doctorId: doctor.id, OR: [{ status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } }] }, select: { startTime: true, endTime: true } });
-    const slotStart = slot.startTime.getHours() * 60 + slot.startTime.getMinutes();
-    const slotEnd = slot.endTime.getHours() * 60 + slot.endTime.getMinutes();
-    const hasMatchingAppointment = appointments.some((appointment) => {
-      const startsAt = new Date(appointment.startTime);
-      const endsAt = new Date(appointment.endTime);
-      if (slot.dayOfWeek !== null && startsAt.getDay() !== slot.dayOfWeek) return false;
-      if (slot.blockedDate && startsAt.toDateString() !== slot.blockedDate.toDateString()) return false;
-      const appointmentStart = startsAt.getHours() * 60 + startsAt.getMinutes();
-      const appointmentEnd = endsAt.getHours() * 60 + endsAt.getMinutes();
-      return appointmentStart < slotEnd && appointmentEnd > slotStart;
-    });
-    if (hasMatchingAppointment) throw new Error("This period contains a booked appointment and cannot be removed");
-    await tx.availability.delete({ where: { id: slot.id } });
-  }, { isolationLevel: "Serializable" });
-  revalidatePath("/doctor");
-  return { success: true };
+  if (!slotId || typeof slotId !== "string") return { success: false, error: "Invalid availability request" };
+
+  try {
+    const doctor = await db.user.findUnique({ where: { clerkUserId: userId, role: "DOCTOR", verificationStatus: "VERIFIED" } });
+    if (!doctor) return { success: false, error: "Doctor not found or not verified" };
+
+    const result = await db.$transaction(async (tx) => {
+      const slot = await tx.availability.findFirst({ where: { id: slotId, doctorId: doctor.id } });
+      if (!slot) return { success: false, error: "Availability period not found" };
+
+      const appointments = await tx.appointment.findMany({
+        where: {
+          doctorId: doctor.id,
+          OR: [
+            { status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] } },
+            { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } },
+          ],
+        },
+        select: { startTime: true, endTime: true },
+      });
+
+      const slotStart = slot.startTime.getHours() * 60 + slot.startTime.getMinutes();
+      const slotEnd = slot.endTime.getHours() * 60 + slot.endTime.getMinutes();
+      const hasMatchingAppointment = appointments.some((appointment) => {
+        const startsAt = new Date(appointment.startTime);
+        const endsAt = new Date(appointment.endTime);
+        if (slot.dayOfWeek !== null && startsAt.getDay() !== slot.dayOfWeek) return false;
+        if (slot.blockedDate && startsAt.toDateString() !== slot.blockedDate.toDateString()) return false;
+        const appointmentStart = startsAt.getHours() * 60 + startsAt.getMinutes();
+        const appointmentEnd = endsAt.getHours() * 60 + endsAt.getMinutes();
+        return appointmentStart < slotEnd && appointmentEnd > slotStart;
+      });
+
+      if (hasMatchingAppointment) {
+        return { success: false, error: "This period contains a booked appointment and cannot be removed" };
+      }
+
+      await tx.availability.delete({ where: { id: slot.id } });
+      return { success: true };
+    }, { isolationLevel: "Serializable" });
+
+    if (!result.success) return result;
+
+    revalidatePath("/doctor");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to remove availability slot:", error);
+    return { success: false, error: error.message || "Failed to remove availability slot" };
+  }
 }
