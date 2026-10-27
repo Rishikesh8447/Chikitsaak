@@ -155,6 +155,7 @@ async function loadPaymentActions() {
     },
     reconcileCapturedAppointmentPayment: reconciliation.reconcileCapturedAppointmentPayment,
     withSerializableRetries: reconciliation.withSerializableRetries,
+    sendAppointmentBookedEmail: async () => {},
     process: { env: { RAZORPAY_KEY_ID: "rzp_test_public", RAZORPAY_KEY_SECRET: "test-secret" } },
     Date: TestDate,
     fetch: async (url, options = {}) => {
@@ -170,7 +171,7 @@ async function loadPaymentActions() {
       return Response.json(state.providerPayments.get(paymentId) || { id: paymentId, status: "failed" });
     },
   };
-  const factory = new Function("dependencies", `const { auth, revalidatePath, addMinutes, db, createAppointmentNotificationPair, rupeesToPaise, verifyRazorpayPaymentSignature, getRazorpayApiConfig, reconcileCapturedAppointmentPayment, withSerializableRetries, fetch, Date } = dependencies; const process = dependencies.process; const console = { error: (...args) => state.diagnostics.push(args) }; const state = dependencies.state; ${transformed}\nreturn { createOnlineAppointmentCheckout, createOfflineAppointmentCheckout, verifyOnlineAppointmentPayment };`);
+  const factory = new Function("dependencies", `const { auth, revalidatePath, addMinutes, db, createAppointmentNotificationPair, rupeesToPaise, verifyRazorpayPaymentSignature, getRazorpayApiConfig, reconcileCapturedAppointmentPayment, withSerializableRetries, fetch, Date, sendAppointmentBookedEmail } = dependencies; const process = dependencies.process; const console = { error: (...args) => state.diagnostics.push(args) }; const state = dependencies.state; ${transformed}\nreturn { createOnlineAppointmentCheckout, createOfflineAppointmentCheckout, verifyOnlineAppointmentPayment };`);
   dependencies.state = state;
   return { ...factory(dependencies), state, clock };
 }

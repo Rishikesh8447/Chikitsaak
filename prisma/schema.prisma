@@ -93,6 +93,9 @@ model Appointment {
   payment               AppointmentPayment?
   checkoutExpiresAt     DateTime?
   consultationMode      AppointmentMode       @default(ONLINE)
+  originalAppointmentId String?               @unique
+  originalAppointment   Appointment?          @relation("AppointmentFollowUp", fields: [originalAppointmentId], references: [id], onDelete: Restrict)
+  followUpAppointment   Appointment?          @relation("AppointmentFollowUp")
 
   @@index([status, startTime])
   @@index([doctorId, startTime])
@@ -242,6 +245,8 @@ model Prescription {
   doctorId            String
   diagnosis           String?
   generalInstructions String?
+  followUpRequired    Boolean                @default(false)
+  followUpDays        Int?
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
   appointment         Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)

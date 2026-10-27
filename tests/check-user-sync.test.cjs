@@ -17,11 +17,13 @@ async function loadCheckUser({ clerkUser, existingUser }) {
   const transformed = source
     .replace('import { currentUser } from "@clerk/nextjs/server";', "const { currentUser } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
+    .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const { measureServerTiming } = dependencies;")
     .replace("export const checkUser = async () =>", "const checkUser = async () =>")
     .concat("\nreturn { checkUser };");
   const checkUser = new Function("dependencies", transformed)({
     currentUser: async () => clerkUser,
     db,
+    measureServerTiming: async (_label, cb) => cb(),
   }).checkUser;
   return { checkUser, state };
 }

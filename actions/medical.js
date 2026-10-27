@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
+import { sendPrescriptionAvailableEmail } from "@/lib/email";
 
 const activeConsultationStatuses = ["IN_PROGRESS", "COMPLETED"];
 
@@ -35,6 +36,30 @@ function parseMedicines(value) {
   }));
 }
 
+const SUPPORTED_FOLLOW_UP_DAYS = [3, 7, 14, 21, 30, 60, 90];
+
+function validateFollowUp(formData) {
+  const rawRequired = formData.get("followUpRequired");
+  const followUpRequired =
+    rawRequired === true ||
+    rawRequired === "true" ||
+    rawRequired === "on" ||
+    rawRequired === 1 ||
+    rawRequired === "1";
+
+  if (!followUpRequired) {
+    return { followUpRequired: false, followUpDays: null };
+  }
+
+  const rawDays = formData.get("followUpDays");
+  const followUpDays = Number.parseInt(rawDays, 10);
+  if (!Number.isInteger(followUpDays) || !SUPPORTED_FOLLOW_UP_DAYS.includes(followUpDays)) {
+    throw new Error("Please select a valid follow-up interval");
+  }
+
+  return { followUpRequired: true, followUpDays };
+}
+
 export async function createPrescription(formData) {
   const doctor = await authenticatedUser();
   if (doctor.role !== "DOCTOR") throw new Error("Only doctors can create prescriptions");
@@ -44,7 +69,9 @@ export async function createPrescription(formData) {
   const diagnosis = requiredText(formData.get("diagnosis"), "Diagnosis", 3000);
   const generalInstructions = typeof formData.get("generalInstructions") === "string" ? formData.get("generalInstructions").trim().slice(0, 3000) || null : null;
   const medicines = parseMedicines(formData.get("medicines"));
+  const { followUpRequired, followUpDays } = validateFollowUp(formData);
 
+  let emailRecipient = null;
   try {
     await db.$transaction(async (tx) => {
       const appointment = await tx.appointment.findUnique({ where: { id: appointmentId }, include: { patient: true, doctor: true } });
@@ -53,23 +80,56 @@ export async function createPrescription(formData) {
       const existing = await tx.prescription.findUnique({ where: { appointmentId } });
       if (existing) throw new Error("A prescription already exists for this consultation");
       const created = await tx.prescription.create({
-        data: { appointmentId, patientId: appointment.patientId, doctorId: doctor.id, diagnosis, generalInstructions, medicines: { create: medicines } },
+        data: {
+          appointmentId,
+          patientId: appointment.patientId,
+          doctorId: doctor.id,
+          diagnosis,
+          generalInstructions,
+          followUpRequired,
+          followUpDays,
+          medicines: { create: medicines },
+        },
         include: { medicines: true },
       });
+      const followUpNotice = followUpRequired && followUpDays
+        ? ` Recommended follow-up within ${followUpDays} days (included at ₹0).`
+        : "";
       await createNotification(tx, {
         userId: appointment.patientId,
         appointmentId,
         type: "PRESCRIPTION_AVAILABLE",
-        title: "New prescription available",
-        message: `Dr. ${doctor.name || "your doctor"} added a prescription to your consultation.`,
+        title: followUpRequired ? "Prescription & Follow-up recommended" : "New prescription available",
+        message: `Dr. ${doctor.name || "your doctor"} added a prescription to your consultation.${followUpNotice}`,
         dedupeKey: `prescription:${created.id}:patient-notification`,
       });
+      emailRecipient = {
+        email: appointment.patient?.email,
+        name: appointment.patient?.name,
+        doctorName: doctor.name,
+      };
     });
+
+    if (emailRecipient?.email) {
+      sendPrescriptionAvailableEmail({
+        to: emailRecipient.email,
+        patientName: emailRecipient.name || "Patient",
+        doctorName: emailRecipient.doctorName || "Doctor",
+        followUpRequired,
+        followUpDays,
+      }).catch((emailError) => {
+        console.error("Failed to send prescription available email:", emailError);
+      });
+    }
+
     revalidatePath("/medical-records");
     revalidatePath("/appointments");
     revalidatePath("/doctor");
     return { success: true };
   } catch (error) {
+    if (error?.message === "Please select a valid follow-up interval") {
+      throw error;
+    }
     throw new Error("Failed to create prescription. Please try again.");
   }
 }

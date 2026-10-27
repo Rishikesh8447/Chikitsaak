@@ -65,6 +65,7 @@ async function loadProcessor({ currentStatus = "CONFIRMED", currentStart, candid
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { createAppointmentNotificationPair } from "@/lib/notifications";', "const { createAppointmentNotificationPair } = dependencies;")
     .replace('import { appointmentReminderKey } from "@/lib/reminder-key.mjs";', "const { appointmentReminderKey } = dependencies;")
+    .replace('import { sendAppointmentReminderEmail } from "@/lib/email";', "const sendAppointmentReminderEmail = dependencies.sendAppointmentReminderEmail || (async () => {});")
     .replace("export async function processDueAppointmentReminders", "async function processDueAppointmentReminders")
     .concat("\nreturn { processDueAppointmentReminders };");
   return { ...new Function("dependencies", transformed)(dependencies), state, now };

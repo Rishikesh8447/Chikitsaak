@@ -67,12 +67,10 @@ async function loadAction({ verificationStatus = "VERIFIED", ownerId = "patient-
     .replace('import { resolveDoctorPublicNames } from "@/lib/doctor-name";', "const resolveDoctorPublicNames = async () => [];")
     .replace('import { getVideoJoinWindowError } from "@/lib/appointment-time.mjs";', "const { getVideoJoinWindowError } = dependencies;")
     .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const { measureServerTiming } = dependencies;")
-    .replace("export async function bookAppointment", "async function bookAppointment")
-    .replace("export async function authorizeVideoCall", "async function authorizeVideoCall")
-    .replace("export async function getVideoCallCredentials", "async function getVideoCallCredentials")
-    .replace("export async function getDoctorById", "async function getDoctorById")
-    .replace("export async function getAvailableTimeSlots", "async function getAvailableTimeSlots")
-    .replace("export async function rescheduleAppointment", "async function rescheduleAppointment")
+    .replace('import { withSerializableRetries } from "@/lib/appointment-payment-reconciliation.mjs";', "const withSerializableRetries = (fn) => fn();")
+    .replace('import { isOriginalAppointmentPaymentVerified } from "@/lib/follow-up-appointment.mjs";', "const isOriginalAppointmentPaymentVerified = () => true;")
+    .replace('import { sendAppointmentBookedEmail, sendAppointmentRescheduledEmail } from "@/lib/email";', "const sendAppointmentBookedEmail = dependencies.sendAppointmentBookedEmail || (async () => {}); const sendAppointmentRescheduledEmail = dependencies.sendAppointmentRescheduledEmail || (async () => {});")
+    .replaceAll("export async function", "async function")
     .concat("\nreturn { authorizeVideoCall, rescheduleAppointment };");
   return { ...new Function("dependencies", transformed)(dependencies), state };
 }

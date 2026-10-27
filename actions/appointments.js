@@ -10,6 +10,9 @@ import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { resolveDoctorPublicNames } from "@/lib/doctor-name";
 import { getVideoJoinWindowError } from "@/lib/appointment-time.mjs";
 import { measureServerTiming } from "@/lib/server-timing.mjs";
+import { withSerializableRetries } from "@/lib/appointment-payment-reconciliation.mjs";
+import { isOriginalAppointmentPaymentVerified } from "@/lib/follow-up-appointment.mjs";
+import { sendAppointmentBookedEmail, sendAppointmentRescheduledEmail } from "@/lib/email";
 
 const BOOKING_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const VIDEO_STATUSES = ["CONFIRMED", "IN_PROGRESS"];
@@ -312,7 +315,7 @@ export async function rescheduleAppointment(formData) {
   const endTime = new Date(endValue);
   if (typeof appointmentId !== "string" || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime || (endTime - startTime) !== 20 * 60 * 1000 || startTime <= new Date()) throw new Error("Invalid rescheduling details");
   const result = await db.$transaction(async (tx) => {
-    const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" } });
+    const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" }, select: { id: true, name: true, email: true } });
     const appointment = await tx.appointment.findUnique({
       where: { id: appointmentId },
       include: { payment: { select: {
@@ -325,7 +328,7 @@ export async function rescheduleAppointment(formData) {
     });
     if (!patient || !appointment || appointment.patientId !== patient.id) throw new Error("Appointment not found or not authorized");
     if (!["SCHEDULED", "CONFIRMED"].includes(appointment.status)) throw new Error("This appointment cannot be rescheduled");
-    const doctor = await tx.user.findUnique({ where: { id: appointment.doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true } });
+    const doctor = await tx.user.findUnique({ where: { id: appointment.doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true, name: true, email: true } });
     if (!doctor) throw new Error("Doctor not found or not verified");
     if (appointment.payment) {
       const payment = appointment.payment;
@@ -360,8 +363,238 @@ export async function rescheduleAppointment(formData) {
     await tx.appointmentReminder.deleteMany({ where: { appointmentId: appointment.id } });
     const updated = await tx.appointment.update({ where: { id: appointment.id }, data: { startTime, endTime } });
     await createAppointmentNotificationPair(tx, updated, { type: "APPOINTMENT_RESCHEDULED", title: "Appointment rescheduled", patientMessage: "Your appointment was rescheduled.", doctorMessage: "An appointment was rescheduled.", key: `appointment:${updated.id}:rescheduled:${startTime.toISOString()}` });
-    return updated;
+    return {
+      ...updated,
+      patient: { name: patient?.name, email: patient?.email },
+      doctor: { name: doctor?.name, email: doctor?.email },
+    };
   }, { isolationLevel: "Serializable" });
+
+  if (result?.patient?.email) {
+    sendAppointmentRescheduledEmail({
+      to: result.patient.email,
+      recipientName: result.patient.name || "Patient",
+      otherPartyName: result.doctor?.name || "Doctor",
+      recipientRole: "PATIENT",
+      newStartTime: startTime,
+      consultationMode: result.consultationMode,
+    }).catch((err) => console.error("Failed to send reschedule email to patient:", err));
+  }
+  if (result?.doctor?.email) {
+    sendAppointmentRescheduledEmail({
+      to: result.doctor.email,
+      recipientName: result.doctor.name || "Doctor",
+      otherPartyName: result.patient?.name || "Patient",
+      recipientRole: "DOCTOR",
+      newStartTime: startTime,
+      consultationMode: result.consultationMode,
+    }).catch((err) => console.error("Failed to send reschedule email to doctor:", err));
+  }
+
   revalidatePath("/appointments");
+  return { success: true, appointment: result };
+}
+
+export async function scheduleFollowUpAppointment(formData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const originalAppointmentId = formData.get("originalAppointmentId");
+  const startValue = formData.get("startTime");
+  const endValue = formData.get("endTime");
+  const consultationMode = formData.get("consultationMode") || "ONLINE";
+  const patientDescription = typeof formData.get("patientDescription") === "string"
+    ? formData.get("patientDescription").trim().slice(0, 5000) || null
+    : null;
+
+  if (typeof originalAppointmentId !== "string" || !originalAppointmentId.trim()) {
+    throw new Error("Original appointment is required");
+  }
+  if (!["ONLINE", "OFFLINE"].includes(consultationMode)) {
+    throw new Error("Invalid consultation mode");
+  }
+
+  const startTime = new Date(startValue);
+  const endTime = new Date(endValue);
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    throw new Error("Invalid appointment timing");
+  }
+  const now = new Date();
+  if (startTime <= now) {
+    throw new Error("Follow-up appointment slot must be in the future");
+  }
+  if (endTime <= startTime || (endTime.getTime() - startTime.getTime()) !== 20 * 60 * 1000) {
+    throw new Error("Appointment duration must be exactly 20 minutes");
+  }
+
+  const result = await withSerializableRetries(() =>
+    db.$transaction(async (tx) => {
+      const patient = await tx.user.findUnique({
+        where: { clerkUserId: userId, role: "PATIENT" },
+        select: { id: true, name: true, email: true },
+      });
+      if (!patient) throw new Error("Patient not found or unauthorized");
+
+      const original = await tx.appointment.findUnique({
+        where: { id: originalAppointmentId },
+        include: {
+          doctor: { select: { id: true, name: true, role: true, verificationStatus: true, email: true } },
+          prescription: { select: { id: true, followUpRequired: true, followUpDays: true } },
+          payment: {
+            select: {
+              method: true,
+              status: true,
+              verifiedAt: true,
+              refundStatus: true,
+              cashCollection: { select: { collectedAt: true, paymentId: true } },
+            },
+          },
+          followUpAppointment: {
+            select: { id: true, status: true, startTime: true, endTime: true },
+          },
+        },
+      });
+
+      if (!original || original.patientId !== patient.id) {
+        throw new Error("Original appointment not found or not owned by you");
+      }
+      if (original.status !== "COMPLETED") {
+        throw new Error("A follow-up can only be scheduled for a completed consultation");
+      }
+      if (original.originalAppointmentId) {
+        throw new Error("A follow-up consultation cannot have another follow-up");
+      }
+      if (!original.prescription?.followUpRequired) {
+        throw new Error("The doctor did not recommend a follow-up for this consultation");
+      }
+      if (!isOriginalAppointmentPaymentVerified(original.payment, original.consultationMode)) {
+        throw new Error("A verified paid consultation is required to schedule an included follow-up");
+      }
+      if (original.doctor.role !== "DOCTOR" || original.doctor.verificationStatus !== "VERIFIED") {
+        throw new Error("Doctor is not currently verified");
+      }
+
+      const existingFollowUp = original.followUpAppointment;
+      if (existingFollowUp && existingFollowUp.status !== "CANCELLED") {
+        throw new Error("A follow-up consultation has already been scheduled for this appointment");
+      }
+
+      const windows = await tx.availability.findMany({
+        where: { doctorId: original.doctorId, status: "AVAILABLE" },
+      });
+      const timeInMinutes = (val) => val.getHours() * 60 + val.getMinutes();
+      const sameDate = (a, b) => a.toDateString() === b.toDateString();
+      const day = startTime.getDay();
+      const inWindow = windows.some((w) =>
+        (w.dayOfWeek === null || w.dayOfWeek === day) &&
+        (!w.blockedDate || !sameDate(new Date(w.blockedDate), startTime)) &&
+        timeInMinutes(new Date(w.startTime)) <= timeInMinutes(startTime) &&
+        timeInMinutes(new Date(w.endTime)) >= timeInMinutes(endTime)
+      );
+      if (!inWindow) {
+        throw new Error("The selected time is outside the doctor's availability");
+      }
+
+      const conflictOverlap = { startTime: { lt: endTime }, endTime: { gt: startTime } };
+      const activeHoldOrBooking = {
+        OR: [
+          { status: { in: BOOKING_STATUSES } },
+          { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: now } },
+        ],
+      };
+      const excludeFilter = existingFollowUp ? { id: { not: existingFollowUp.id } } : {};
+      const [doctorConflict, patientConflict] = await Promise.all([
+        tx.appointment.findFirst({
+          where: { doctorId: original.doctorId, ...conflictOverlap, ...activeHoldOrBooking, ...excludeFilter },
+        }),
+        tx.appointment.findFirst({
+          where: { patientId: patient.id, ...conflictOverlap, ...activeHoldOrBooking, ...excludeFilter },
+        }),
+      ]);
+      if (doctorConflict || patientConflict) {
+        throw new Error("This slot is no longer available. Please select another time.");
+      }
+
+      let bookedAppointment;
+      if (existingFollowUp && existingFollowUp.status === "CANCELLED") {
+        const reactivated = await tx.appointment.updateMany({
+          where: { id: existingFollowUp.id, status: "CANCELLED" },
+          data: {
+            startTime,
+            endTime,
+            consultationMode,
+            patientDescription,
+            status: "SCHEDULED",
+            videoSessionId: null,
+            checkoutExpiresAt: null,
+          },
+        });
+        if (reactivated.count !== 1) {
+          throw new Error("Follow-up appointment state changed; please try again.");
+        }
+        await tx.appointmentReminder.deleteMany({
+          where: { appointmentId: existingFollowUp.id },
+        });
+        bookedAppointment = await tx.appointment.findUnique({
+          where: { id: existingFollowUp.id },
+        });
+      } else {
+        bookedAppointment = await tx.appointment.create({
+          data: {
+            patientId: patient.id,
+            doctorId: original.doctorId,
+            startTime,
+            endTime,
+            consultationMode,
+            patientDescription,
+            status: "SCHEDULED",
+            originalAppointmentId: original.id,
+          },
+        });
+      }
+
+      await createAppointmentNotificationPair(tx, bookedAppointment, {
+        type: "APPOINTMENT_BOOKED",
+        title: "Follow-up consultation scheduled",
+        patientMessage: `Your follow-up consultation with Dr. ${original.doctor.name || "your doctor"} has been scheduled (included at ₹0). Waiting for doctor confirmation.`,
+        doctorMessage: `A follow-up consultation was scheduled by ${patient.name || "your patient"} for ${format(startTime, "MMM d, yyyy 'at' h:mm a")}.`,
+        key: `appointment:${bookedAppointment.id}:follow-up:${startTime.toISOString()}`,
+      });
+
+      return {
+        ...bookedAppointment,
+        patientEmail: patient?.email,
+        patientName: patient?.name,
+        doctorEmail: original.doctor?.email,
+        doctorName: original.doctor?.name,
+      };
+    }, { isolationLevel: "Serializable" })
+  );
+
+  if (result?.patientEmail) {
+    sendAppointmentBookedEmail({
+      to: result.patientEmail,
+      recipientRole: "PATIENT",
+      recipientName: result.patientName || "Patient",
+      otherPartyName: result.doctorName || "Doctor",
+      startTime: result.startTime,
+      consultationMode: result.consultationMode,
+      isFollowUp: true,
+    }).catch((err) => console.error("Failed to send follow-up booking email to patient:", err));
+  }
+  if (result?.doctorEmail) {
+    sendAppointmentBookedEmail({
+      to: result.doctorEmail,
+      recipientRole: "DOCTOR",
+      recipientName: result.doctorName || "Doctor",
+      otherPartyName: result.patientName || "Patient",
+      startTime: result.startTime,
+      consultationMode: result.consultationMode,
+      isFollowUp: true,
+    }).catch((err) => console.error("Failed to send follow-up booking email to doctor:", err));
+  }
+
+  revalidatePath("/appointments");
+  revalidatePath("/doctor");
   return { success: true, appointment: result };
 }

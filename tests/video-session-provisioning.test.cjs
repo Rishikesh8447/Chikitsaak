@@ -90,6 +90,9 @@ async function loadVideoActions({ configured = true, providerFailure = false } =
     .replace('import { resolveDoctorPublicNames } from "@/lib/doctor-name";', "const { resolveDoctorPublicNames } = dependencies;")
     .replace('import { getVideoJoinWindowError } from "@/lib/appointment-time.mjs";', "const { getVideoJoinWindowError } = dependencies;")
     .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const { measureServerTiming } = dependencies;")
+    .replace('import { withSerializableRetries } from "@/lib/appointment-payment-reconciliation.mjs";', "const withSerializableRetries = (fn) => fn();")
+    .replace('import { isOriginalAppointmentPaymentVerified } from "@/lib/follow-up-appointment.mjs";', "const isOriginalAppointmentPaymentVerified = () => true;")
+    .replace('import { sendAppointmentBookedEmail, sendAppointmentRescheduledEmail } from "@/lib/email";', "const sendAppointmentBookedEmail = dependencies.sendAppointmentBookedEmail || (async () => {}); const sendAppointmentRescheduledEmail = dependencies.sendAppointmentRescheduledEmail || (async () => {});")
     .replaceAll("export async function", "async function")
     .concat("\nreturn { authorizeVideoCall, getVideoCallCredentials };");
   const factory = new Function("dependencies", `const process = dependencies.process; const console = dependencies.console; ${transformed}`);

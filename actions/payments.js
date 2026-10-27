@@ -8,6 +8,7 @@ import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { rupeesToPaise, verifyRazorpayPaymentSignature } from "@/lib/razorpay.mjs";
 import { getRazorpayApiConfig } from "@/lib/razorpay-config.mjs";
 import { reconcileCapturedAppointmentPayment, withSerializableRetries } from "@/lib/appointment-payment-reconciliation.mjs";
+import { sendAppointmentBookedEmail } from "@/lib/email";
 
 const ACTIVE_APPOINTMENT_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const SAFE_PAYMENT_ERROR_CODES = new Set([
@@ -141,8 +142,8 @@ async function createAppointmentCheckout(formData, consultationMode, paymentMeth
   let checkout;
   try {
     checkout = await withSerializableRetries(() => db.$transaction(async (tx) => {
-      const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" }, select: { id: true } });
-      const doctor = await tx.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true, consultationPriceRupees: true } });
+      const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" }, select: { id: true, name: true, email: true } });
+      const doctor = await tx.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true, name: true, email: true, consultationPriceRupees: true } });
       if (!patient) throw checkoutError("PATIENT_NOT_FOUND", "Your patient account could not be found. Please sign in again.");
       if (!doctor) throw checkoutError("DOCTOR_UNAVAILABLE", "This doctor is not currently available for booking.");
       if (!Number.isSafeInteger(doctor.consultationPriceRupees) || doctor.consultationPriceRupees < 1 || doctor.consultationPriceRupees > 100000) {
@@ -199,7 +200,7 @@ async function createAppointmentCheckout(formData, consultationMode, paymentMeth
           key: `appointment:${appointment.id}:booked`,
         });
       }
-      return { appointmentId: appointment.id, paymentId: payment.id, amountRupees, amountPaise };
+      return { appointmentId: appointment.id, paymentId: payment.id, amountRupees, amountPaise, startTime, consultationMode, patient, doctor };
     }, { isolationLevel: "Serializable", timeout: 15000 }));
   } catch (error) {
     if (error?.checkoutError) return { success: false, code: error.code, message: error.message };
@@ -209,6 +210,28 @@ async function createAppointmentCheckout(formData, consultationMode, paymentMeth
   }
 
   if (paymentMethod === "CASH") {
+    if (checkout?.patient?.email) {
+      sendAppointmentBookedEmail({
+        to: checkout.patient.email,
+        recipientRole: "PATIENT",
+        recipientName: checkout.patient.name || "Patient",
+        otherPartyName: checkout.doctor?.name || "Doctor",
+        startTime: checkout.startTime,
+        consultationMode: checkout.consultationMode,
+        isFollowUp: false,
+      }).catch((err) => console.error("Failed to send cash booking email to patient:", err));
+    }
+    if (checkout?.doctor?.email) {
+      sendAppointmentBookedEmail({
+        to: checkout.doctor.email,
+        recipientRole: "DOCTOR",
+        recipientName: checkout.doctor.name || "Doctor",
+        otherPartyName: checkout.patient?.name || "Patient",
+        startTime: checkout.startTime,
+        consultationMode: checkout.consultationMode,
+        isFollowUp: false,
+      }).catch((err) => console.error("Failed to send cash booking email to doctor:", err));
+    }
     revalidatePath("/appointments");
     revalidatePath("/doctor");
     return { success: true, code: "CASH_DUE", appointmentId: checkout.appointmentId, amountRupees: checkout.amountRupees };
@@ -391,6 +414,41 @@ export async function verifyOnlineAppointmentPayment({ appointmentId, orderId, p
     });
     revalidatePath("/appointments");
     revalidatePath("/doctor");
+    if (outcome === "PAID" && typeof db?.appointment?.findUnique === "function") {
+      try {
+        const booked = await db.appointment.findUnique({
+          where: { id: appointmentId },
+          include: {
+            patient: { select: { name: true, email: true } },
+            doctor: { select: { name: true, email: true } },
+          },
+        });
+        if (booked?.patient?.email) {
+          sendAppointmentBookedEmail({
+            to: booked.patient.email,
+            recipientRole: "PATIENT",
+            recipientName: booked.patient.name || "Patient",
+            otherPartyName: booked.doctor?.name || "Doctor",
+            startTime: booked.startTime,
+            consultationMode: booked.consultationMode,
+            isFollowUp: false,
+          }).catch((err) => console.error("Failed to send booking email to patient:", err));
+        }
+        if (booked?.doctor?.email) {
+          sendAppointmentBookedEmail({
+            to: booked.doctor.email,
+            recipientRole: "DOCTOR",
+            recipientName: booked.doctor.name || "Doctor",
+            otherPartyName: booked.patient?.name || "Patient",
+            startTime: booked.startTime,
+            consultationMode: booked.consultationMode,
+            isFollowUp: false,
+          }).catch((err) => console.error("Failed to send booking email to doctor:", err));
+        }
+      } catch (emailErr) {
+        console.error("Failed to dispatch booking emails:", emailErr);
+      }
+    }
     if (outcome === "PAID" || outcome === "ALREADY_PAID" || outcome === "DUPLICATE_EVENT") return { success: true, appointmentId };
     if (outcome === "REVIEW_REQUIRED") return { success: false, code: "REFUND_REVIEW_REQUIRED", message: "Payment was received, but the appointment cannot be confirmed. It has been flagged for admin review." };
     return { success: false, code: "PAYMENT_UNAVAILABLE", message: "Payment could not be applied to this appointment." };

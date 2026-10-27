@@ -41,6 +41,8 @@ async function loadAction({ user = { id: "doctor-a", role: "DOCTOR", verificatio
     .replace('import { createAppointmentNotificationPair } from "@/lib/notifications";', "const { createAppointmentNotificationPair } = dependencies;")
     .replace('import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";', "const { canTransitionAppointment } = dependencies;")
     .replace('import { cancelAppointmentInTransaction, CANCELLATION_ERRORS } from "@/lib/appointment-cancellation.mjs";', "const { cancelAppointmentInTransaction, CANCELLATION_ERRORS } = dependencies;")
+    .replace('import { parseConsultationPriceRupees } from "@/lib/razorpay.mjs";', "const parseConsultationPriceRupees = () => null;")
+    .replace('import { sendAppointmentConfirmedEmail, sendAppointmentCancelledEmail } from "@/lib/email";', "const sendAppointmentConfirmedEmail = dependencies.sendAppointmentConfirmedEmail || (async () => {}); const sendAppointmentCancelledEmail = dependencies.sendAppointmentCancelledEmail || (async () => {});")
     .replaceAll("export async function", "async function")
     .concat("\nreturn { addAppointmentNotes };");
   return { ...new Function("dependencies", transformed)(dependencies), state };

@@ -40,7 +40,22 @@ export async function getPatientAppointments() {
         notes: true,
         patientDescription: true,
         consultationMode: true,
-        payment: { select: { method: true, status: true, refundStatus: true, amountRupees: true, cashCollection: { select: { collectedAt: true } } } },
+        originalAppointmentId: true,
+        prescription: {
+          select: {
+            followUpRequired: true,
+            followUpDays: true,
+          },
+        },
+        followUpAppointment: {
+          select: {
+            id: true,
+            status: true,
+            startTime: true,
+            endTime: true,
+          },
+        },
+        payment: { select: { method: true, status: true, refundStatus: true, amountRupees: true, verifiedAt: true, cashCollection: { select: { collectedAt: true } } } },
         doctor: {
           select: {
             id: true,

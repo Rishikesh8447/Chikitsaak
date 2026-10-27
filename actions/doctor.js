@@ -7,6 +7,7 @@ import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";
 import { cancelAppointmentInTransaction, CANCELLATION_ERRORS } from "@/lib/appointment-cancellation.mjs";
 import { parseConsultationPriceRupees } from "@/lib/razorpay.mjs";
+import { sendAppointmentConfirmedEmail, sendAppointmentCancelledEmail } from "@/lib/email";
 
 export async function updateConsultationPrice(formData) {
   const { userId } = await auth();
@@ -165,7 +166,7 @@ export async function getDoctorAppointments() {
       },
       include: {
         patient: { select: { id: true, name: true, email: true, imageUrl: true } },
-        prescription: { include: { medicines: true } },
+        prescription: { select: { id: true } },
         payment: { select: { method: true, status: true, amountRupees: true, cashCollection: { select: { collectedAt: true } } } },
       },
       orderBy: {
@@ -209,20 +210,49 @@ export async function cancelAppointment(formData) {
     }
 
     // Resolve ownership and accounting from the transaction's consistent database view.
-    await db.$transaction(
-      (tx) => cancelAppointmentInTransaction(tx, {
-        appointmentId,
-        actorId: user.id,
-        notify: (transaction, appointment) => createAppointmentNotificationPair(transaction, appointment, {
-          type: "APPOINTMENT_CANCELLED",
-          title: "Appointment cancelled",
-          patientMessage: "Your appointment was cancelled.",
-          doctorMessage: "An appointment was cancelled.",
-          key: `appointment:${appointment.id}:cancelled`,
-        }),
-      }),
+    const cancelledDetails = await db.$transaction(
+      async (tx) => {
+        await cancelAppointmentInTransaction(tx, {
+          appointmentId,
+          actorId: user.id,
+          notify: (transaction, appointment) => createAppointmentNotificationPair(transaction, appointment, {
+            type: "APPOINTMENT_CANCELLED",
+            title: "Appointment cancelled",
+            patientMessage: "Your appointment was cancelled.",
+            doctorMessage: "An appointment was cancelled.",
+            key: `appointment:${appointment.id}:cancelled`,
+          }),
+        });
+        return tx.appointment.findUnique({
+          where: { id: appointmentId },
+          select: {
+            startTime: true,
+            patient: { select: { id: true, name: true, email: true } },
+            doctor: { select: { id: true, name: true, email: true } },
+          },
+        });
+      },
       { isolationLevel: "Serializable" }
     );
+
+    if (cancelledDetails?.patient?.email) {
+      sendAppointmentCancelledEmail({
+        to: cancelledDetails.patient.email,
+        recipientName: cancelledDetails.patient.name || "Patient",
+        otherPartyName: cancelledDetails.doctor?.name || "Doctor",
+        recipientRole: "PATIENT",
+        startTime: cancelledDetails.startTime,
+      }).catch((err) => console.error("Failed to send cancellation email to patient:", err));
+    }
+    if (cancelledDetails?.doctor?.email) {
+      sendAppointmentCancelledEmail({
+        to: cancelledDetails.doctor.email,
+        recipientName: cancelledDetails.doctor.name || "Doctor",
+        otherPartyName: cancelledDetails.patient?.name || "Patient",
+        recipientRole: "DOCTOR",
+        startTime: cancelledDetails.startTime,
+      }).catch((err) => console.error("Failed to send cancellation email to doctor:", err));
+    }
 
     // Determine which path to revalidate based on user role
     if (user.role === "DOCTOR") {
@@ -390,19 +420,42 @@ export async function updateAppointmentStatus(formData) {
   if (!["CONFIRMED", "IN_PROGRESS", "COMPLETED", "NO_SHOW"].includes(nextStatus)) throw new Error("Invalid appointment status");
   const appointment = await db.appointment.findUnique({
     where: { id: appointmentId, doctorId: actor.id },
-    include: { payment: { select: { method: true, status: true, verifiedAt: true } } },
+    include: {
+      patient: { select: { name: true, email: true } },
+      payment: { select: { method: true, status: true, verifiedAt: true } },
+      originalAppointment: {
+        include: {
+          payment: { select: { method: true, status: true, verifiedAt: true, refundStatus: true, cashCollection: { select: { collectedAt: true } } } },
+        },
+      },
+    },
   });
   if (!appointment || !canTransitionAppointment(appointment.status, nextStatus)) throw new Error("Invalid appointment status transition");
-  if (nextStatus === "CONFIRMED" && !appointment.payment) {
-    throw new Error("A payment record is required before confirming this appointment");
-  }
-  const requiresVerifiedPayment = appointment.consultationMode === "ONLINE" || appointment.payment?.method === "UPI_QR";
-  if (requiresVerifiedPayment && (
-    appointment.payment.status !== "PAID"
-    || !appointment.payment.verifiedAt
-    || (appointment.consultationMode === "ONLINE" && appointment.payment.method !== "ONLINE")
-  )) {
-    throw new Error("A verified payment is required before confirming this appointment");
+  if (nextStatus === "CONFIRMED") {
+    if (appointment.originalAppointmentId) {
+      const originalPayment = appointment.originalAppointment?.payment;
+      const originalPaid = originalPayment?.status === "PAID"
+        && originalPayment?.refundStatus === "NOT_REQUIRED"
+        && (
+          (originalPayment.method !== "CASH" && Boolean(originalPayment.verifiedAt)) ||
+          (originalPayment.method === "CASH" && Boolean(originalPayment.cashCollection?.collectedAt))
+        );
+      if (!originalPaid) {
+        throw new Error("The original consultation payment is not verified");
+      }
+    } else {
+      if (!appointment.payment) {
+        throw new Error("A payment record is required before confirming this appointment");
+      }
+      const requiresVerifiedPayment = appointment.consultationMode === "ONLINE" || appointment.payment?.method === "UPI_QR";
+      if (requiresVerifiedPayment && (
+        appointment.payment.status !== "PAID"
+        || !appointment.payment.verifiedAt
+        || (appointment.consultationMode === "ONLINE" && appointment.payment.method !== "ONLINE")
+      )) {
+        throw new Error("A verified payment is required before confirming this appointment");
+      }
+    }
   }
   const now = new Date();
   if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && now < appointment.endTime) throw new Error("This appointment has not ended yet");
@@ -415,6 +468,18 @@ export async function updateAppointmentStatus(formData) {
     if (nextStatus === "NO_SHOW") await createAppointmentNotificationPair(tx, changed, { type: "NO_SHOW", title: "Appointment marked no-show", patientMessage: "Your appointment was marked as no-show.", doctorMessage: "The appointment was marked as no-show.", key: `appointment:${changed.id}:no-show` });
     return changed;
   });
+
+  if (nextStatus === "CONFIRMED" && appointment?.patient?.email) {
+    sendAppointmentConfirmedEmail({
+      to: appointment.patient.email,
+      recipientName: appointment.patient.name || "Patient",
+      doctorName: actor.name || "Doctor",
+      startTime: appointment.startTime,
+      consultationMode: appointment.consultationMode,
+      appointmentId: appointment.id,
+    }).catch((err) => console.error("Failed to send appointment confirmed email to patient:", err));
+  }
+
   revalidatePath("/doctor");
   revalidatePath("/appointments");
   return { success: true, appointment: updated };

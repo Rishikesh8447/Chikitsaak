@@ -27,12 +27,14 @@ const roleLinks = {
 
 const Header = async ({ user: initialUser } = {}) => {
   const user = initialUser === undefined ? await checkUser() : initialUser;
-  const partnerMemberships = user && ["PATIENT", "DOCTOR", "UNASSIGNED"].includes(user.role)
-    ? await measureServerTiming("layout.partnerMembershipQueries", () => Promise.all([
-        db.laboratoryMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
-        db.pharmacyMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
-      ]))
-    : [];
+  const partnerMemberships = user?.laboratoryMemberships && user?.pharmacyMemberships
+    ? [user.laboratoryMemberships[0], user.pharmacyMemberships[0]]
+    : user && ["PATIENT", "DOCTOR", "UNASSIGNED"].includes(user.role)
+      ? await measureServerTiming("layout.partnerMembershipQueries", () => Promise.all([
+          db.laboratoryMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
+          db.pharmacyMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
+        ]))
+      : [];
   const isLaboratoryPartner = Boolean(partnerMemberships[0]);
   const isPharmacyPartner = Boolean(partnerMemberships[1]);
   const isPartner = isLaboratoryPartner || isPharmacyPartner;

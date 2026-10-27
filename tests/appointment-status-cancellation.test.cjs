@@ -46,6 +46,7 @@ async function loadStatusAction() {
     .replace('import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";', "const { canTransitionAppointment } = dependencies;")
     .replace('import { cancelAppointmentInTransaction, CANCELLATION_ERRORS } from "@/lib/appointment-cancellation.mjs";', "const { cancelAppointmentInTransaction, CANCELLATION_ERRORS } = dependencies;")
     .replace('import { parseConsultationPriceRupees } from "@/lib/razorpay.mjs";', "const { parseConsultationPriceRupees } = dependencies;")
+    .replace('import { sendAppointmentConfirmedEmail, sendAppointmentCancelledEmail } from "@/lib/email";', "const sendAppointmentConfirmedEmail = dependencies.sendAppointmentConfirmedEmail || (async () => {}); const sendAppointmentCancelledEmail = dependencies.sendAppointmentCancelledEmail || (async () => {});")
     .replaceAll("export async function", "async function")
     .concat("\nreturn { updateAppointmentStatus };");
   return { ...new Function("dependencies", transformed)(dependencies), state };

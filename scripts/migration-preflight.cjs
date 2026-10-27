@@ -33,7 +33,10 @@ const PAYMENT = [
   "20261024120000_payment_backed_doctor_payouts",
   "20261024130000_remove_legacy_credit_system",
 ];
-const EXPECTED_FILES = [...BASE, ...PAYMENT].sort();
+const FOLLOW_UP = [
+  "20261027120000_follow_up_appointments",
+];
+const EXPECTED_FILES = [...BASE, ...PAYMENT, ...FOLLOW_UP].sort();
 
 function validateMigrationDirectories(names) {
   const actual = names.filter((name) => name !== "migration_lock.toml").sort();
@@ -419,5 +422,5 @@ async function main() {
   }
 }
 
-module.exports = { validateLedger, validateMigrationDirectories, parseArgs, normalizeDatabaseUrlInput, inspectDatabaseUrl, formatDatabaseUrlDiagnostic, validateDatabaseTarget, readLocalDatabaseUrl, createPrismaClient, hasMigrationLedger, hasUserSchemaObjects, safeErrorDiagnostic, EXPECTED_FILES, HISTORICAL, BASE, PAYMENT };
+module.exports = { validateLedger, validateMigrationDirectories, parseArgs, normalizeDatabaseUrlInput, inspectDatabaseUrl, formatDatabaseUrlDiagnostic, validateDatabaseTarget, readLocalDatabaseUrl, createPrismaClient, hasMigrationLedger, hasUserSchemaObjects, safeErrorDiagnostic, EXPECTED_FILES, HISTORICAL, BASE, PAYMENT, FOLLOW_UP };
 if (require.main === module) main();

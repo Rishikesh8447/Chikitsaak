@@ -52,6 +52,7 @@ async function loadActions({
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { createNotification } from "@/lib/notifications";', "const { createNotification } = dependencies;")
+    .replace('import { sendPrescriptionAvailableEmail } from "@/lib/email";', "const sendPrescriptionAvailableEmail = dependencies.sendPrescriptionAvailableEmail || (async () => {});")
     .replaceAll("export async function", "async function")
     .concat("\nreturn { createPrescription, getMyMedicalRecords, updateMedicalProfile, getAppointmentPrescription };");
   return { ...new Function("dependencies", transformed)(dependencies), state };

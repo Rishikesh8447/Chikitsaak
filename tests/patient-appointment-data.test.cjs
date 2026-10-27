@@ -36,9 +36,13 @@ test("patient appointment records are scoped to the authenticated persisted pati
   assert.equal(query.select.patientId, undefined);
   assert.deepEqual(query.select.review, { select: { id: true, rating: true, comment: true } });
   assert.equal(query.select.payment.select.refundStatus, true);
+  assert.equal(query.select.payment.select.verifiedAt, true);
   assert.equal(query.select.checkoutExpiresAt, true);
-  assert.deepEqual(query.select.payment.select.cashCollection, { select: { collectedAt: true } });
-  assert.equal(query.select.prescription, undefined);
+  assert.deepEqual(query.select.prescription, { select: { followUpRequired: true, followUpDays: true } });
+  assert.equal(query.select.prescription.select.medicines, undefined);
+  assert.equal(query.select.prescription.select.diagnosis, undefined);
+  assert.equal(query.select.originalAppointmentId, true);
+  assert.deepEqual(query.select.followUpAppointment, { select: { id: true, status: true, startTime: true, endTime: true } });
 });
 
 test("unauthenticated patient appointment request is rejected", async () => {

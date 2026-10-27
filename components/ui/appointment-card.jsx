@@ -33,7 +33,12 @@ import {
   updateAppointmentStatus,
   recordCashAppointmentCollection,
 } from "@/actions/doctor";
-import { authorizeVideoCall, getAvailableTimeSlots, rescheduleAppointment } from "@/actions/appointments";
+import {
+  authorizeVideoCall,
+  getAvailableTimeSlots,
+  rescheduleAppointment,
+  scheduleFollowUpAppointment,
+} from "@/actions/appointments";
 import useFetch from "@/hooks/use-fetch";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -43,6 +48,11 @@ import { AiDoctorNoteAssistant } from "@/components/ai-doctor-note-assistant";
 import { formatLocalSlotRange } from "@/lib/appointment-time.mjs";
 import { getAppointmentPaymentLabel } from "@/lib/appointment-payment-display.mjs";
 import { resumePendingAppointmentCheckout, verifyOnlineAppointmentPayment } from "@/actions/payments";
+import {
+  calculateRecommendedFollowUpDate,
+  isOriginalAppointmentEligibleForFollowUp,
+  getDoctorSupportedModes,
+} from "@/lib/follow-up-appointment.mjs";
 
 export function AppointmentCard({
   appointment,
@@ -54,6 +64,11 @@ export function AppointmentCard({
   const [notes, setNotes] = useState(appointment.notes || "");
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [selectedRescheduleSlot, setSelectedRescheduleSlot] = useState(null);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [selectedFollowUpSlot, setSelectedFollowUpSlot] = useState(null);
+  const [followUpMode, setFollowUpMode] = useState("ONLINE");
+  const [followUpNotes, setFollowUpNotes] = useState("");
+  const [followUpError, setFollowUpError] = useState(null);
   const [resumeCheckoutLoading, setResumeCheckoutLoading] = useState(false);
   const [razorpayReady, setRazorpayReady] = useState(false);
   const [resumeStatusMessage, setResumeStatusMessage] = useState(null);
@@ -86,6 +101,13 @@ export function AppointmentCard({
   const { loading: cashCollectionLoading, fn: submitCashCollection, data: cashCollectionData } = useFetch(recordCashAppointmentCollection);
   const { loading: slotsLoading, fn: loadSlots, data: slotsData } = useFetch(getAvailableTimeSlots);
   const { loading: rescheduleLoading, fn: submitReschedule, data: rescheduleData } = useFetch(rescheduleAppointment);
+  const { loading: followUpSlotsLoading, fn: loadFollowUpSlots, data: followUpSlotsData } = useFetch(getAvailableTimeSlots);
+  const {
+    loading: followUpLoading,
+    fn: submitFollowUp,
+    data: followUpData,
+    error: followUpSubmitError,
+  } = useFetch(scheduleFollowUpAppointment);
 
   // Format date and time
   const formatDateTime = (dateString) => {
@@ -254,6 +276,38 @@ export function AppointmentCard({
     await submitReschedule(formData);
   };
 
+  const openFollowUp = async () => {
+    setFollowUpOpen(true);
+    setSelectedFollowUpSlot(null);
+    setFollowUpNotes("");
+    setFollowUpError(null);
+    const supported = getDoctorSupportedModes(appointment.doctor);
+    const defaultMode = supported.includes(appointment.consultationMode)
+      ? appointment.consultationMode
+      : (supported[0] || "ONLINE");
+    setFollowUpMode(defaultMode);
+    await loadFollowUpSlots(appointment.doctorId);
+  };
+
+  const handleSubmitFollowUp = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    if (!selectedFollowUpSlot || followUpLoading) return;
+    setFollowUpError(null);
+    const formData = new FormData();
+    formData.append("originalAppointmentId", appointment.id);
+    formData.append("startTime", selectedFollowUpSlot.startTime);
+    formData.append("endTime", selectedFollowUpSlot.endTime);
+    formData.append("consultationMode", followUpMode);
+    if (followUpNotes.trim()) {
+      formData.append("patientDescription", followUpNotes.trim());
+    }
+    try {
+      await submitFollowUp(formData);
+    } catch (err) {
+      setFollowUpError(err?.message || "Failed to schedule follow-up appointment");
+    }
+  };
+
   // Handle save notes (doctor only)
   const handleSaveNotes = async () => {
     if (notesLoading || userRole !== "DOCTOR") return;
@@ -348,6 +402,23 @@ export function AppointmentCard({
     }
   }, [rescheduleData, refetchAppointments, router]);
 
+  useEffect(() => {
+    if (followUpData?.success) {
+      toast.success("Follow-up appointment scheduled successfully (included at ₹0)");
+      setFollowUpOpen(false);
+      setSelectedFollowUpSlot(null);
+      setFollowUpNotes("");
+      setFollowUpError(null);
+      if (refetchAppointments) refetchAppointments(); else router.refresh();
+    }
+  }, [followUpData, refetchAppointments, router]);
+
+  useEffect(() => {
+    if (followUpSubmitError) {
+      setFollowUpError(followUpSubmitError.message || "Failed to schedule follow-up appointment");
+    }
+  }, [followUpSubmitError]);
+
   // Determine if appointment is active (within 30 minutes of start time)
   const isAppointmentActive = () => {
     const now = new Date();
@@ -369,10 +440,19 @@ export function AppointmentCard({
   const otherPartyLabel = userRole === "DOCTOR" ? "Patient" : "Doctor";
   const otherPartyIcon = userRole === "DOCTOR" ? <User /> : <Stethoscope />;
 
+  const isFollowUpAppointment = Boolean(appointment.originalAppointmentId);
+  const followUpEligibility = userRole === "PATIENT"
+    ? isOriginalAppointmentEligibleForFollowUp(appointment)
+    : { eligible: false };
+  const canBookFollowUp = followUpEligibility.eligible;
+  const recommendedFollowUpDate = appointment.prescription?.followUpDays
+    ? calculateRecommendedFollowUpDate(appointment.startTime, appointment.prescription.followUpDays)
+    : null;
+
   return (
     <>
       <Card className="border-border transition-colors hover:border-primary/40 shadow-none">
-        {userRole === "PATIENT" && appointment.status === "PAYMENT_PENDING"
+        {userRole === "PATIENT" && !isFollowUpAppointment && appointment.status === "PAYMENT_PENDING"
           && appointment.payment?.status === "PENDING"
           && ["ONLINE", "UPI_QR"].includes(appointment.payment.method) && (
             <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" onReady={() => setRazorpayReady(true)} />
@@ -410,33 +490,70 @@ export function AppointmentCard({
                     {formatTime(appointment.endTime)}
                   </span>
                 </div>
+                {userRole === "PATIENT" && appointment.prescription?.followUpRequired && (
+                  <div className="flex items-center mt-2 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                    <Calendar className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-primary shrink-0" />
+                    <span>
+                      Recommended follow-up: within {appointment.prescription.followUpDays} days
+                      {recommendedFollowUpDate ? ` (around ${format(recommendedFollowUpDate, "MMM d, yyyy")})` : ""}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex flex-col gap-2 self-end md:self-start items-end">
-              <Badge
-                variant="outline"
-                className={
-                  appointment.status === "COMPLETED"
-                    ? "bg-green-700/10 border-green-700/20 text-green-700 dark:text-green-400"
-                    : appointment.status === "CANCELLED"
-                    ? "bg-red-700/10 border-red-700/20 text-red-700 dark:text-destructive"
-                    : appointment.status === "CONFIRMED" || appointment.status === "IN_PROGRESS"
-                    ? "bg-primary/10 border-primary/20 text-primary"
-                    : "bg-muted border-border text-muted-foreground"
-                }
-              >
-                {appointment.status}
-              </Badge>
-              {appointment.payment && (
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {isFollowUpAppointment && (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-medium"
+                  >
+                    Follow-up (Included / ₹0)
+                  </Badge>
+                )}
+                <Badge
+                  variant="outline"
+                  className={
+                    appointment.status === "COMPLETED"
+                      ? "bg-green-700/10 border-green-700/20 text-green-700 dark:text-green-400"
+                      : appointment.status === "CANCELLED"
+                      ? "bg-red-700/10 border-red-700/20 text-red-700 dark:text-destructive"
+                      : appointment.status === "CONFIRMED" || appointment.status === "IN_PROGRESS"
+                      ? "bg-primary/10 border-primary/20 text-primary"
+                      : "bg-muted border-border text-muted-foreground"
+                  }
+                >
+                  {appointment.status}
+                </Badge>
+              </div>
+              {isFollowUpAppointment ? (
+                <div className="text-right text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  Follow-up (Included / ₹0)
+                </div>
+              ) : appointment.payment ? (
                 <div className="text-right text-xs text-muted-foreground">
-              <span>{resumeStatusMessage || getAppointmentPaymentLabel(appointment.payment, appointment)}</span>
+                  <span>{resumeStatusMessage || getAppointmentPaymentLabel(appointment.payment, appointment)}</span>
                   {appointment.payment.cashCollection?.collectedAt && (
                     <span className="mt-0.5 block">Collected {formatDateTime(appointment.payment.cashCollection.collectedAt)}</span>
                   )}
                 </div>
-              )}
+              ) : null}
               <div className="flex gap-2 mt-2 flex-wrap justify-end">
-                {userRole === "PATIENT" && appointment.status === "PAYMENT_PENDING"
+                {canBookFollowUp && (
+                  <Button
+                    size="sm"
+                    onClick={openFollowUp}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                  >
+                    Book Follow-up (Included / ₹0)
+                  </Button>
+                )}
+                {userRole === "PATIENT" && appointment.followUpAppointment && appointment.followUpAppointment.status !== "CANCELLED" && (
+                  <Badge variant="outline" className="bg-muted border-border text-xs text-muted-foreground self-center">
+                    Follow-up: {appointment.followUpAppointment.status}
+                  </Badge>
+                )}
+                {userRole === "PATIENT" && !isFollowUpAppointment && appointment.status === "PAYMENT_PENDING"
                   && appointment.payment?.status === "PENDING"
                   && ["ONLINE", "UPI_QR"].includes(appointment.payment.method)
                   && !resumeStatusMessage && (
@@ -560,18 +677,28 @@ export function AppointmentCard({
               <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Status
               </h4>
-              <Badge
-                variant="outline"
-                className={
-                  appointment.status === "COMPLETED"
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-primary font-medium"
-                    : appointment.status === "CANCELLED"
-                    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-destructive font-medium"
-                    : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium"
-                }
-              >
-                {appointment.status}
-              </Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                {isFollowUpAppointment && (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-medium"
+                  >
+                    Follow-up (Included / ₹0)
+                  </Badge>
+                )}
+                <Badge
+                  variant="outline"
+                  className={
+                    appointment.status === "COMPLETED"
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-primary font-medium"
+                      : appointment.status === "CANCELLED"
+                      ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-destructive font-medium"
+                      : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium"
+                  }
+                >
+                  {appointment.status}
+                </Badge>
+              </div>
             </div>
 
             {/* Patient Description */}
@@ -720,6 +847,42 @@ export function AppointmentCard({
               </div>
             )}
 
+            {userRole === "PATIENT" && appointment.prescription?.followUpRequired && (
+              <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5">
+                <h4 className="text-xs font-semibold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4" />
+                  Follow-up Recommendation
+                </h4>
+                <p className="text-sm text-foreground">
+                  The doctor recommended a follow-up consultation within <span className="font-semibold">{appointment.prescription.followUpDays} days</span> (included at ₹0).
+                </p>
+                {recommendedFollowUpDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Target timeframe: around {format(recommendedFollowUpDate, "MMMM d, yyyy")} (guidance only — select any available slot).
+                  </p>
+                )}
+                {canBookFollowUp && (
+                  <div className="pt-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setOpen(false);
+                        openFollowUp();
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                    >
+                      Book Follow-up (Included / ₹0)
+                    </Button>
+                  </div>
+                )}
+                {appointment.followUpAppointment && appointment.followUpAppointment.status !== "CANCELLED" && (
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 pt-1">
+                    Follow-up consultation is {appointment.followUpAppointment.status.toLowerCase()}.
+                  </p>
+                )}
+              </div>
+            )}
+
             {userRole === "PATIENT" && appointment.status === "COMPLETED" && (
               <div className="space-y-2 rounded-xl border border-border/80 p-3.5 bg-muted/20">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Rate this consultation</h4>
@@ -791,6 +954,190 @@ export function AppointmentCard({
             {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && <p className="text-xs text-muted-foreground">No available appointments for these dates.</p>}
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button><Button onClick={confirmReschedule} disabled={!selectedRescheduleSlot || rescheduleLoading} className="bg-primary text-primary-foreground hover:bg-primary/90">{rescheduleLoading ? "Rescheduling..." : "Confirm Reschedule"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={followUpOpen} onOpenChange={setFollowUpOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-foreground font-bold">
+              Book Follow-up Consultation
+            </DialogTitle>
+            <DialogDescription>
+              Schedule your included follow-up appointment with Dr. {otherParty?.name || "your doctor"}. Included at ₹0.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Recommendation guidance */}
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5 space-y-1">
+              <div className="flex items-center text-sm font-semibold text-foreground">
+                <Calendar className="mr-2 h-4 w-4 text-primary" />
+                Recommended follow-up timeframe: within {appointment.prescription?.followUpDays} days
+              </div>
+              {recommendedFollowUpDate && (
+                <p className="text-xs text-muted-foreground">
+                  Target timeframe: around {format(recommendedFollowUpDate, "MMMM d, yyyy")} (Guidance only — select any available slot).
+                </p>
+              )}
+            </div>
+
+            {/* Consultation Mode Selection */}
+            {(() => {
+              const supportedModes = getDoctorSupportedModes(appointment.doctor);
+              return (
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Consultation Mode
+                  </legend>
+                  {supportedModes.length > 1 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        ["ONLINE", "Online Video Consultation"],
+                        ["OFFLINE", "In-person Clinic Consultation"],
+                      ].filter(([val]) => supportedModes.includes(val)).map(([val, label]) => (
+                        <label
+                          key={val}
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-3 text-sm transition-colors ${
+                            followUpMode === val
+                              ? "border-primary bg-primary/5 font-medium text-foreground"
+                              : "border-border hover:bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="followUpConsultationMode"
+                            value={val}
+                            checked={followUpMode === val}
+                            onChange={() => setFollowUpMode(val)}
+                            className="text-primary focus:ring-primary"
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-border p-3 text-sm text-foreground">
+                      <span className="font-medium">
+                        {supportedModes[0] === "OFFLINE" ? "In-person Clinic Consultation" : "Online Video Consultation"}
+                      </span>
+                      <span className="ml-2 text-xs text-muted-foreground">(Doctor supported mode)</span>
+                    </div>
+                  )}
+                </fieldset>
+              );
+            })()}
+
+            {/* Slot Picker */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Select an Available Slot (20 minutes)
+              </h4>
+              <div className="max-h-60 space-y-4 overflow-y-auto rounded-lg border border-border p-3">
+                {followUpSlotsLoading ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-primary" />
+                    Loading available slots...
+                  </div>
+                ) : followUpSlotsData?.days?.some((day) => day.slots.length > 0) ? (
+                  followUpSlotsData.days.map((day) =>
+                    day.slots.length > 0 ? (
+                      <div key={day.date} className="space-y-2">
+                        <h5 className="text-xs font-semibold text-foreground">
+                          {day.displayDate}
+                        </h5>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {day.slots.map((slot) => (
+                            <Button
+                              key={slot.startTime}
+                              type="button"
+                              size="sm"
+                              variant={
+                                selectedFollowUpSlot?.startTime === slot.startTime
+                                  ? "default"
+                                  : "outline"
+                              }
+                              className="text-xs h-9 justify-center"
+                              onClick={() => setSelectedFollowUpSlot(slot)}
+                            >
+                              <Clock className="mr-1.5 h-3.5 w-3.5" />
+                              {formatLocalSlotRange(slot.startTime, slot.endTime)}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null
+                  )
+                ) : (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    No available appointments for this doctor right now. Please check back later.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Patient Description / Notes */}
+            <div className="space-y-2">
+              <label htmlFor="followUpNotes" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Reason or symptoms update (Optional)
+              </label>
+              <Textarea
+                id="followUpNotes"
+                value={followUpNotes}
+                onChange={(e) => setFollowUpNotes(e.target.value)}
+                placeholder="Describe any symptoms or reason for this follow-up..."
+                maxLength={5000}
+                className="text-sm bg-background border-border min-h-[70px]"
+              />
+            </div>
+
+            {/* Summary / Included ₹0 badge */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between text-xs">
+              <div>
+                <span className="font-medium text-foreground">Consultation Fee:</span>
+                <span className="ml-2 font-bold text-emerald-700 dark:text-emerald-400">
+                  Included (₹0)
+                </span>
+              </div>
+              {selectedFollowUpSlot && (
+                <div className="text-muted-foreground">
+                  {format(new Date(selectedFollowUpSlot.startTime), "MMM d, h:mm a")}
+                </div>
+              )}
+            </div>
+
+            {/* Server Error Notice */}
+            {followUpError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                {followUpError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFollowUpOpen(false)}
+              disabled={followUpLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSubmitFollowUp}
+              disabled={!selectedFollowUpSlot || followUpLoading || followUpSlotsLoading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+            >
+              {followUpLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Scheduling Follow-up...
+                </>
+              ) : (
+                "Confirm Follow-up (₹0)"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

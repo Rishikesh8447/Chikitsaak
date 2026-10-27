@@ -157,30 +157,36 @@ export async function getDoctorEarnings() {
       throw new Error("Doctor not found");
     }
 
-    // Get all completed appointments for this doctor
-    const [completedAppointments, collectedPayments, availablePayments, reservedAllocations, paidAllocations] = await Promise.all([
+    // Get all completed appointments, eligible payments, and active allocations for this doctor
+    const [completedAppointments, payments, allocations] = await Promise.all([
       measureServerTiming("doctorEarnings.completedAppointmentsQuery", () =>
         db.appointment.count({ where: { doctorId: doctor.id, status: "COMPLETED" } })
       ),
-      measureServerTiming("doctorEarnings.collectedPaymentsQuery", () => db.appointmentPayment.findMany({
-        where: { ...eligiblePaymentWhere(doctor.id) },
-        select: { id: true, amountPaise: true },
-      })),
-      measureServerTiming("doctorEarnings.availablePaymentsQuery", () => db.appointmentPayment.findMany({
-        where: {
-          ...eligiblePaymentWhere(doctor.id),
-          payoutAllocations: { none: { status: { in: ["RESERVED", "PAID"] } } },
+      measureServerTiming("doctorEarnings.eligiblePaymentsQuery", () => db.appointmentPayment.findMany({
+        where: eligiblePaymentWhere(doctor.id),
+        select: {
+          id: true,
+          amountPaise: true,
+          payoutAllocations: {
+            where: { status: { in: ["RESERVED", "PAID"] } },
+            select: { id: true },
+          },
         },
-        select: { id: true, amountPaise: true },
       })),
-      measureServerTiming("doctorEarnings.reservedAllocationsQuery", () =>
-        db.payoutPaymentAllocation.findMany({ where: { payout: { doctorId: doctor.id }, status: "RESERVED" }, select: { amountPaise: true } })
-      ),
-      measureServerTiming("doctorEarnings.paidAllocationsQuery", () =>
-        db.payoutPaymentAllocation.findMany({ where: { payout: { doctorId: doctor.id }, status: "PAID" }, select: { amountPaise: true } })
+      measureServerTiming("doctorEarnings.allocationsQuery", () =>
+        db.payoutPaymentAllocation.findMany({
+          where: { payout: { doctorId: doctor.id }, status: { in: ["RESERVED", "PAID"] } },
+          select: { status: true, amountPaise: true },
+        })
       ),
     ]);
-    const sumPayments = (payments) => payments.reduce((sum, payment) => sum + BigInt(payment.amountPaise), 0n);
+
+    const collectedPayments = payments;
+    const availablePayments = payments.filter((payment) => !payment.payoutAllocations?.length);
+    const reservedAllocations = allocations.filter((allocation) => allocation.status === "RESERVED");
+    const paidAllocations = allocations.filter((allocation) => allocation.status === "PAID");
+
+    const sumPayments = (items) => items.reduce((sum, payment) => sum + BigInt(payment.amountPaise), 0n);
     const collectedPaise = sumPayments(collectedPayments);
     const availablePaise = sumPayments(availablePayments);
     const reservedPaise = sumAllocationPaise(reservedAllocations);
