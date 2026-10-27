@@ -180,6 +180,27 @@ export function AppointmentCard({
 
   const handleStatusChange = async (status) => {
     if (statusLoading) return;
+    if (status === "IN_PROGRESS") {
+      const now = new Date();
+      const startTime = new Date(appointment.startTime);
+      const endTime = new Date(appointment.endTime);
+      if (now < startTime) {
+        toast.error(`Consultation can only start during the scheduled appointment time (starts at ${formatTime(appointment.startTime)})`);
+        return;
+      }
+      if (now >= endTime) {
+        toast.error("This appointment has already ended");
+        return;
+      }
+    }
+    if (status === "NO_SHOW") {
+      const now = new Date();
+      const endTime = new Date(appointment.endTime);
+      if (now < endTime) {
+        toast.error("An appointment cannot be marked as no-show until after the scheduled end time");
+        return;
+      }
+    }
     const formData = new FormData();
     formData.append("appointmentId", appointment.id);
     formData.append("status", status);
@@ -383,6 +404,9 @@ export function AppointmentCard({
       handledStatusResult.current = statusData;
       toast.success("Appointment status updated");
       if (refetchAppointments) refetchAppointments(); else router.refresh();
+    } else if (statusData && !statusData.success && statusData.error && handledStatusResult.current !== statusData) {
+      handledStatusResult.current = statusData;
+      toast.error(statusData.error);
     }
   }, [statusData, refetchAppointments, router]);
 
@@ -590,7 +614,14 @@ export function AppointmentCard({
                   <Button size="sm" onClick={() => handleStatusChange("CONFIRMED")} disabled={statusLoading}>Confirm</Button>
                 )}
                 {userRole === "DOCTOR" && appointment.status === "CONFIRMED" && (
-                  <Button size="sm" onClick={() => handleStatusChange("IN_PROGRESS")} disabled={statusLoading}>Start</Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleStatusChange("IN_PROGRESS")}
+                    disabled={statusLoading || new Date() < new Date(appointment.startTime)}
+                    title={new Date() < new Date(appointment.startTime) ? `Starts at ${formatTime(appointment.startTime)}` : "Start consultation"}
+                  >
+                    Start
+                  </Button>
                 )}
                 <Button
                   size="sm"

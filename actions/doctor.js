@@ -768,8 +768,12 @@ export async function updateAppointmentStatus(formData) {
     }
   }
   const now = new Date();
-  if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && now < appointment.endTime) throw new Error("This appointment has not ended yet");
-  if (nextStatus === "IN_PROGRESS" && (now < new Date(appointment.startTime) || now >= new Date(appointment.endTime))) throw new Error("Consultation can only start during the appointment time");
+  if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && now < appointment.endTime) {
+    return { success: false, error: "This appointment has not ended yet" };
+  }
+  if (nextStatus === "IN_PROGRESS" && (now < new Date(appointment.startTime) || now >= new Date(appointment.endTime))) {
+    return { success: false, error: "Consultation can only start during the appointment time" };
+  }
   const updated = await db.$transaction(async (tx) => {
     const changedResult = await tx.appointment.updateMany({ where: { id: appointment.id, status: appointment.status }, data: { status: nextStatus } });
     if (changedResult.count !== 1) throw new Error("Appointment status changed; refresh and try again");

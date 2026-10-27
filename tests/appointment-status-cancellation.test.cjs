@@ -119,3 +119,64 @@ test("doctor can confirm a paid online appointment and cash-due offline appointm
     if (appointment.payment.method === "CASH") assert.equal(state.appointment.payment.status, "CASH_DUE");
   }
 });
+
+test("doctor cannot start consultation before appointment start time and receives clean structured error", async () => {
+  const { updateAppointmentStatus, state } = await loadStatusAction();
+  state.appointment = {
+    id: "appointment-1",
+    doctorId: "doctor-1",
+    status: "CONFIRMED",
+    startTime: new Date(Date.now() + 15 * 60 * 1000), // starts in 15 minutes
+    endTime: new Date(Date.now() + 35 * 60 * 1000),
+    consultationMode: "ONLINE",
+  };
+  const formData = new Map([ ["appointmentId", "appointment-1"], ["status", "IN_PROGRESS"] ]);
+
+  const result = await updateAppointmentStatus(formData);
+  assert.deepEqual(result, {
+    success: false,
+    error: "Consultation can only start during the appointment time",
+  });
+  assert.equal(state.transactions, 0);
+  assert.equal(state.appointment.status, "CONFIRMED");
+});
+
+test("doctor cannot mark no-show before appointment end time and receives clean structured error", async () => {
+  const { updateAppointmentStatus, state } = await loadStatusAction();
+  state.appointment = {
+    id: "appointment-1",
+    doctorId: "doctor-1",
+    status: "CONFIRMED",
+    startTime: new Date(Date.now() - 10 * 60 * 1000),
+    endTime: new Date(Date.now() + 10 * 60 * 1000), // ends in 10 minutes
+    consultationMode: "ONLINE",
+  };
+  const formData = new Map([ ["appointmentId", "appointment-1"], ["status", "NO_SHOW"] ]);
+
+  const result = await updateAppointmentStatus(formData);
+  assert.deepEqual(result, {
+    success: false,
+    error: "This appointment has not ended yet",
+  });
+  assert.equal(state.transactions, 0);
+  assert.equal(state.appointment.status, "CONFIRMED");
+});
+
+test("doctor can start consultation during appointment window", async () => {
+  const { updateAppointmentStatus, state } = await loadStatusAction();
+  state.appointment = {
+    id: "appointment-1",
+    doctorId: "doctor-1",
+    status: "CONFIRMED",
+    startTime: new Date(Date.now() - 5 * 60 * 1000), // started 5 minutes ago
+    endTime: new Date(Date.now() + 15 * 60 * 1000),
+    consultationMode: "ONLINE",
+  };
+  const formData = new Map([ ["appointmentId", "appointment-1"], ["status", "IN_PROGRESS"] ]);
+
+  const result = await updateAppointmentStatus(formData);
+  assert.equal(result.success, true);
+  assert.equal(state.transactions, 1);
+  assert.equal(state.appointment.status, "IN_PROGRESS");
+});
+
