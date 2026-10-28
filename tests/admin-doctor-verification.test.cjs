@@ -57,6 +57,7 @@ async function loadActions({ callerRole = "ADMIN", targetRole = "DOCTOR", target
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { clerkClient } from "@clerk/nextjs/server";', "const { clerkClient } = dependencies;")
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
+    .replace('import { flagPaymentPayoutsForReview, releasePaymentPayoutAllocations, recordPaymentPayoutTransfer } from "@/lib/payment-payouts.mjs";', "const { flagPaymentPayoutsForReview, releasePaymentPayoutAllocations, recordPaymentPayoutTransfer } = dependencies;")
     .concat("\nreturn { updateDoctorStatus, updateDoctorActiveStatus };");
 
   return { ...new Function("dependencies", transformed)(dependencies), state };

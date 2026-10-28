@@ -6,7 +6,7 @@ import { db } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { sendPrescriptionAvailableEmail } from "@/lib/email";
 
-const activeConsultationStatuses = ["IN_PROGRESS", "COMPLETED"];
+const activeConsultationStatuses = ["CONFIRMED", "IN_PROGRESS", "COMPLETED"];
 
 async function authenticatedUser() {
   const { userId } = await auth();
@@ -36,7 +36,7 @@ function parseMedicines(value) {
   }));
 }
 
-const SUPPORTED_FOLLOW_UP_DAYS = [3, 7, 14, 21, 30, 60, 90];
+const SUPPORTED_FOLLOW_UP_DAYS = [2, 3, 5, 7, 14, 21, 30, 60, 90];
 
 function validateFollowUp(formData) {
   const rawRequired = formData.get("followUpRequired");
@@ -67,7 +67,13 @@ export async function createPrescription(formData) {
   const appointmentId = formData.get("appointmentId");
   if (typeof appointmentId !== "string") throw new Error("Appointment is required");
   const diagnosis = requiredText(formData.get("diagnosis"), "Diagnosis", 3000);
-  const generalInstructions = typeof formData.get("generalInstructions") === "string" ? formData.get("generalInstructions").trim().slice(0, 3000) || null : null;
+  const generalInstructionsRaw = typeof formData.get("generalInstructions") === "string" ? formData.get("generalInstructions").trim().slice(0, 3000) || null : null;
+  const testsAdvised = typeof formData.get("testsAdvised") === "string" ? formData.get("testsAdvised").trim().slice(0, 1000) || null : null;
+  const combinedInstructions = [
+    generalInstructionsRaw,
+    testsAdvised ? `Recommended Laboratory Tests:\n${testsAdvised}` : null,
+  ].filter(Boolean).join("\n\n") || null;
+  const generalInstructions = combinedInstructions ? combinedInstructions.slice(0, 3000) : null;
   const medicines = parseMedicines(formData.get("medicines"));
   const { followUpRequired, followUpDays } = validateFollowUp(formData);
 
@@ -130,6 +136,18 @@ export async function createPrescription(formData) {
     if (error?.message === "Please select a valid follow-up interval") {
       throw error;
     }
+    if (
+      error?.message === "A prescription already exists for this consultation" ||
+      error?.message === "Appointment not found or not authorized" ||
+      error?.message === "A prescription requires an active or completed consultation" ||
+      error?.message === "Add at least one medicine"
+    ) {
+      throw new Error(`Failed to create prescription: ${error.message}`);
+    }
+    if (error?.code === "P2002") {
+      throw new Error("Failed to create prescription: A prescription already exists for this consultation");
+    }
+    console.error("Prescription creation error:", error);
     throw new Error("Failed to create prescription. Please try again.");
   }
 }
@@ -187,14 +205,27 @@ export async function createReview(formData) {
   try {
     await db.$transaction(async (tx) => {
       const appointment = await tx.appointment.findUnique({ where: { id: appointmentId } });
-      if (!appointment || appointment.patientId !== patient.id || appointment.status !== "COMPLETED") throw new Error("Only completed consultations can be reviewed");
+      if (!appointment || appointment.patientId !== patient.id) throw new Error("You are not authorized to review this appointment");
+      if (appointment.status !== "COMPLETED") throw new Error("Only completed consultations can be reviewed");
+      const existing = await tx.review.findUnique({ where: { appointmentId } });
+      if (existing) throw new Error("You have already reviewed this consultation");
       await tx.review.create({ data: { appointmentId, patientId: patient.id, doctorId: appointment.doctorId, rating, comment } });
     });
     revalidatePath("/appointments");
     revalidatePath("/doctors");
     return { success: true };
   } catch (error) {
-    if (error?.code === "P2002") throw new Error("You have already reviewed this consultation");
+    if (error?.code === "P2002" || error?.message === "You have already reviewed this consultation") {
+      throw new Error("You have already reviewed this consultation");
+    }
+    if (
+      error?.message === "Only completed consultations can be reviewed" ||
+      error?.message === "You are not authorized to review this appointment" ||
+      error?.message === "Choose an integer rating from 1 to 5" ||
+      error?.message === "Only patients can leave reviews"
+    ) {
+      throw error;
+    }
     throw new Error("Failed to submit review. Please try again.");
   }
 }

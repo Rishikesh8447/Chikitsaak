@@ -74,6 +74,7 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
                       src={doctor.imageUrl}
                       alt={doctorName}
                       fill
+                      sizes="(min-width: 640px) 112px, 96px"
                       className="object-cover"
                     />
                   ) : (

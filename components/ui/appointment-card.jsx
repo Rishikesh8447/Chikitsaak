@@ -16,6 +16,7 @@ import {
   Edit,
   Loader2,
   CheckCircle,
+  Star,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -58,8 +59,9 @@ export function AppointmentCard({
   appointment,
   userRole,
   refetchAppointments,
+  initialOpen = false,
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(initialOpen));
   const [action, setAction] = useState(null); // 'cancel', 'notes', 'video', or 'complete'
   const [notes, setNotes] = useState(appointment.notes || "");
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -129,12 +131,7 @@ export function AppointmentCard({
 
   // Check if appointment can be marked as completed
   const canMarkCompleted = () => {
-    if (userRole !== "DOCTOR" || appointment.status !== "IN_PROGRESS") {
-      return false;
-    }
-    const now = new Date();
-    const appointmentEndTime = new Date(appointment.endTime);
-    return now >= appointmentEndTime;
+    return userRole === "DOCTOR" && appointment.status === "IN_PROGRESS";
   };
 
   // Handle cancel appointment
@@ -155,17 +152,6 @@ export function AppointmentCard({
   // Handle mark as completed
   const handleMarkCompleted = async () => {
     if (completeLoading) return;
-
-    // Check if appointment end time has passed
-    const now = new Date();
-    const appointmentEndTime = new Date(appointment.endTime);
-
-    if (now < appointmentEndTime) {
-      alert(
-        "Cannot mark appointment as completed before the scheduled end time."
-      );
-      return;
-    }
 
     if (
       window.confirm(
@@ -623,6 +609,24 @@ export function AppointmentCard({
                     Start
                   </Button>
                 )}
+                {userRole === "PATIENT" && appointment.status === "COMPLETED" && (
+                  appointment.review ? (
+                    <Badge variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs self-center flex items-center gap-1">
+                      <Star className="size-3 fill-amber-400 text-amber-400" />
+                      {appointment.review.rating}/5 Reviewed
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 font-medium"
+                      onClick={() => setOpen(true)}
+                    >
+                      <Star className="size-3.5 mr-1 fill-amber-400 text-amber-400" />
+                      Rate Doctor
+                    </Button>
+                  )
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -871,7 +875,8 @@ export function AppointmentCard({
               )}
             </div>
 
-            {userRole === "DOCTOR" && ["IN_PROGRESS", "COMPLETED"].includes(appointment.status) && (
+            {((userRole === "DOCTOR" && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(appointment.status)) ||
+              (userRole === "PATIENT" && Boolean(appointment.prescription))) && (
               <div className="space-y-2 rounded-xl border border-border/80 p-3.5 bg-muted/20">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Digital Prescription</h4>
                 <PrescriptionForm appointmentId={appointment.id} existing={appointment.prescription} />
@@ -978,13 +983,116 @@ export function AppointmentCard({
         </DialogContent>
       </Dialog>
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle className="text-foreground font-bold">Reschedule appointment?</DialogTitle><DialogDescription>Select a new available 20-minute slot. Your appointment payment will not change.</DialogDescription></DialogHeader>
-          <div className="max-h-80 space-y-4 overflow-y-auto py-2">
-            {slotsLoading ? <p className="text-xs text-muted-foreground">Loading available slots...</p> : slotsData?.days?.map((day) => <div key={day.date}><h4 className="mb-2 text-xs font-semibold text-foreground">{day.displayDate}</h4><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{day.slots.map((slot) => <Button key={slot.startTime} variant={selectedRescheduleSlot?.startTime === slot.startTime ? "default" : "outline"} onClick={() => setSelectedRescheduleSlot(slot)}>{formatLocalSlotRange(slot.startTime, slot.endTime)}</Button>)}</div></div>)}
-            {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && <p className="text-xs text-muted-foreground">No available appointments for these dates.</p>}
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 border-b border-border/80 shrink-0">
+            <DialogTitle className="text-foreground text-lg font-bold flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              Reschedule Consultation
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              Select an available 20-minute slot with Dr. {otherParty?.name || "your doctor"}. Your payment remains confirmed and will not change.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Selected Slot Preview Callout */}
+          {selectedRescheduleSlot && (
+            <div className="mx-6 mt-4 p-3.5 rounded-xl border border-primary/30 bg-primary/10 flex items-center justify-between gap-3 shrink-0 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="size-9 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0">
+                  <Clock className="size-4" />
+                </div>
+                <div>
+                  <p className="text-xs text-primary font-semibold uppercase tracking-wider">Selected Slot</p>
+                  <p className="text-sm font-bold text-foreground">
+                    {formatLocalSlotRange(selectedRescheduleSlot.startTime, selectedRescheduleSlot.endTime)}
+                  </p>
+                </div>
+              </div>
+              <Badge variant="outline" className="bg-primary text-primary-foreground border-transparent text-xs font-medium">
+                Ready to confirm
+              </Badge>
+            </div>
+          )}
+
+          {/* Slots List (Scrollable, footer remains pinned) */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 max-h-[50vh]">
+            {slotsLoading ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-xs font-medium">Checking doctor availability...</p>
+              </div>
+            ) : slotsData?.days?.map((day) => (
+              <div key={day.date} className="space-y-2.5">
+                <div className="flex items-center gap-2 pb-1 border-b border-border/50">
+                  <Calendar className="size-3.5 text-primary" />
+                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">{day.displayDate}</h4>
+                  <span className="text-[11px] text-muted-foreground">({day.slots.length} available)</span>
+                </div>
+                {day.slots.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {day.slots.map((slot) => {
+                      const isSelected = selectedRescheduleSlot?.startTime === slot.startTime;
+                      return (
+                        <button
+                          key={slot.startTime}
+                          type="button"
+                          onClick={() => setSelectedRescheduleSlot(slot)}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs ring-2 ring-primary ring-offset-2 ring-offset-background"
+                              : "border border-border/80 hover:border-primary/50 hover:bg-primary/5 text-foreground bg-background"
+                          }`}
+                        >
+                          <Clock className={`size-3.5 shrink-0 ${isSelected ? "text-primary-foreground" : "text-muted-foreground"}`} />
+                          <span className="truncate">{formatLocalSlotRange(slot.startTime, slot.endTime)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic py-1">No remaining slots for this date.</p>
+                )}
+              </div>
+            ))}
+            {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && (
+              <div className="text-center py-10 rounded-xl border border-dashed border-border p-6">
+                <Calendar className="size-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-semibold text-foreground">No slots currently open</p>
+                <p className="text-xs text-muted-foreground mt-1">Dr. {otherParty?.name || "The doctor"} does not have open slots in this window. Check back soon.</p>
+              </div>
+            )}
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button><Button onClick={confirmReschedule} disabled={!selectedRescheduleSlot || rescheduleLoading} className="bg-primary text-primary-foreground hover:bg-primary/90">{rescheduleLoading ? "Rescheduling..." : "Confirm Reschedule"}</Button></DialogFooter>
+
+          {/* Sticky Dialog Footer */}
+          <DialogFooter className="p-4 sm:p-5 border-t border-border/80 bg-muted/20 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground w-full sm:w-auto text-center sm:text-left">
+              {selectedRescheduleSlot ? (
+                <span>Confirmed appointment will move to the selected time.</span>
+              ) : (
+                <span>Choose a time slot to proceed.</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button variant="outline" size="sm" onClick={() => setRescheduleOpen(false)} disabled={rescheduleLoading}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={confirmReschedule}
+                disabled={!selectedRescheduleSlot || rescheduleLoading}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+              >
+                {rescheduleLoading ? (
+                  <>
+                    <Loader2 className="mr-2 size-3.5 animate-spin" />
+                    Rescheduling...
+                  </>
+                ) : (
+                  "Confirm Reschedule"
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={followUpOpen} onOpenChange={setFollowUpOpen}>

@@ -14,6 +14,7 @@ import { Button } from "./ui/button";
 export function PageHeader({
   icon,
   title,
+  identity,
   backLink = "/",
   backLabel = "Back to Home",
   description,
@@ -22,6 +23,12 @@ export function PageHeader({
   return (
     <div className="mb-7 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
+        {identity && (
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {identity.icon && React.createElement(identity.icon, { className: "size-3.5 text-primary shrink-0" })}
+            <span>{identity.label}</span>
+          </div>
+        )}
         <div className="flex min-w-0 items-center gap-2.5">
           {icon && <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">{React.cloneElement(icon, { className: "size-4" })}</span>}
           <h1 className="min-w-0 text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">{title}</h1>

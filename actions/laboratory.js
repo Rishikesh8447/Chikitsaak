@@ -7,7 +7,7 @@ import { verifyAdmin } from "@/actions/admin";
 import { canTransitionLabOrder, canTransitionLaboratory, getEligibleLaboratories, normalizeCatalogKey, normalizeIdList, parseMoney } from "@/lib/laboratory-workflow.mjs";
 
 const appointmentOrderStatuses = ["CONFIRMED", "IN_PROGRESS", "COMPLETED"];
-const labRoutes = ["/laboratory", "/doctor/laboratory", "/admin"];
+const labRoutes = ["/laboratory", "/laboratory/workspace", "/doctor/laboratory", "/admin"];
 // Multi-write workflow actions include authorization reads, status records, and notifications.
 // Neon round-trip latency exceeded Prisma's 5s interactive-transaction default in integration tests.
 const laboratoryTransactionOptions = { isolationLevel: "Serializable", timeout: 15_000 };
@@ -139,7 +139,7 @@ export async function addLaboratoryMember(formData) {
   const role = text(formData, "role", "Role", 20);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !["MANAGER", "STAFF"].includes(role)) throw new Error("Member details are invalid");
   await db.$transaction(async (tx) => {
-    const owner = await membershipFor(tx, user.id, laboratoryId, ["OWNER"]);
+    const owner = await verifiedMembershipFor(tx, user.id, laboratoryId, ["OWNER"]);
     const target = await tx.user.findUnique({ where: { email }, select: { id: true } });
     if (!target) throw new Error("The member must create a Chikitsaak account before being added");
     if (target.id === user.id) throw new Error("The owner is already a member");
@@ -164,7 +164,7 @@ export async function updateLaboratoryMember(formData) {
   const role = text(formData, "role", "Role", 20, false);
   if (!["revoke", "change-role"].includes(action) || (action === "change-role" && !["MANAGER", "STAFF"].includes(role))) throw new Error("Membership action is invalid");
   await db.$transaction(async (tx) => {
-    await membershipFor(tx, user.id, laboratoryId, ["OWNER"]);
+    await verifiedMembershipFor(tx, user.id, laboratoryId, ["OWNER"]);
     const member = await tx.laboratoryMembership.findFirst({ where: { id: membershipId, laboratoryId, status: "ACTIVE", role: { in: ["MANAGER", "STAFF"] } }, select: { id: true, role: true, userId: true } });
     if (!member) throw new Error("Active non-owner membership not found");
     const changed = await tx.laboratoryMembership.updateMany({
@@ -182,7 +182,25 @@ export async function getLaboratoryWorkspace(requestedLaboratoryId) {
   const user = await currentUser();
   const memberships = await db.laboratoryMembership.findMany({
     where: { userId: user.id, status: "ACTIVE" },
-    include: { laboratory: { select: { id: true, name: true, status: true, statusReason: true } } },
+    include: {
+      laboratory: {
+        select: {
+          id: true,
+          name: true,
+          legalName: true,
+          registrationNumber: true,
+          contactEmail: true,
+          contactPhone: true,
+          address: true,
+          city: true,
+          state: true,
+          country: true,
+          status: true,
+          statusReason: true,
+          createdAt: true,
+        },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
   if (!memberships.length) return { memberships: [], selected: null, offerings: [], orders: [] };
@@ -190,22 +208,26 @@ export async function getLaboratoryWorkspace(requestedLaboratoryId) {
   const isVerified = selected.laboratory.status === "VERIFIED";
   const canManageOfferings = ["OWNER", "MANAGER"].includes(selected.role);
   const [offerings, orders, tests, team] = await Promise.all([
-    db.laboratoryOffering.findMany({
-      where: { laboratoryId: selected.laboratoryId },
-      include: { labTest: { select: { id: true, name: true, code: true, category: true } } },
-      orderBy: { labTest: { name: "asc" } },
-    }),
-    db.labOrder.findMany({
-      where: { laboratoryId: selected.laboratoryId },
-       include: {
-        patient: { select: { id: true, name: true } },
-        doctor: { select: { name: true } },
-        items: { select: { id: true, testName: true, testCategory: true, testDescription: true, priceAtBooking: true } },
-        statusHistory: { select: { fromStatus: true, toStatus: true, note: true, createdAt: true }, orderBy: { createdAt: "asc" } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    }),
+    isVerified
+      ? db.laboratoryOffering.findMany({
+          where: { laboratoryId: selected.laboratoryId },
+          include: { labTest: { select: { id: true, name: true, code: true, category: true } } },
+          orderBy: { labTest: { name: "asc" } },
+        })
+      : Promise.resolve([]),
+    isVerified
+      ? db.labOrder.findMany({
+          where: { laboratoryId: selected.laboratoryId },
+          include: {
+            patient: { select: { id: true, name: true } },
+            doctor: { select: { name: true } },
+            items: { select: { id: true, testName: true, testCategory: true, testDescription: true, priceAtBooking: true } },
+            statusHistory: { select: { fromStatus: true, toStatus: true, note: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        })
+      : Promise.resolve([]),
     isVerified && canManageOfferings
       ? db.labTest.findMany({ where: { isActive: true }, select: { id: true, name: true, category: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
@@ -542,6 +564,7 @@ export async function saveLaboratoryOffering(formData) {
     await addAudit(tx, { actorUserId: user.id, laboratoryId, entityType: "LaboratoryOffering", entityId: offering.id, action: "OFFERING_SAVED" });
   }, laboratoryTransactionOptions);
   revalidatePath("/laboratory");
+  revalidatePath("/laboratory/workspace");
   revalidatePath("/doctor/laboratory");
   return { success: true };
 }

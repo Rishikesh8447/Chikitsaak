@@ -1,7 +1,7 @@
 import { verifyAdmin } from "@/actions/admin";
 import { redirect } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Users, CreditCard, BarChart3 } from "lucide-react";
+import { AlertCircle, Users, CreditCard, BarChart3, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { AdminLabNavLink, AdminPharmacyNavLink, AdminTabsRoot } from "./_components/admin-tabs-root";
 
@@ -58,7 +58,7 @@ export default async function AdminLayout({ children }) {
         </div>
 
         <div className="min-w-0 w-full space-y-6">
-          <PageHeader title="Administration" description="Review doctor applications, manage payouts, and monitor platform activity." backLink={null} />
+          <PageHeader identity={{ label: "Administration Dashboard", icon: ShieldCheck }} title="Administration" description="Review doctor applications, manage payouts, and monitor platform activity." backLink={null} />
           {children}
         </div>
       </AdminTabsRoot>

@@ -2,13 +2,13 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const { join } = require("node:path");
-const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } = require("../lib/pharmacy-workflow.mjs");
+const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, validateProductDates, isProductExpired, parseDateOnly, formatDateOnly, serializePharmacyProduct } = require("../lib/pharmacy-workflow.mjs");
 
 const sourcePromise = readFile(join(__dirname, "..", "actions", "pharmacy.js"), "utf8");
 
 function form(fields) { return { get: (key) => fields[key] ?? null }; }
 
-async function loadActions({ role = "PATIENT", userId = "user-a", membership = null, pharmacyStatus = "PENDING", updateCount = 1, workspaceMemberships = [] } = {}) {
+async function loadActions({ role = "PATIENT", userId = "user-a", membership = null, pharmacyStatus = "PENDING", updateCount = 1, deleteCount = 1, findFirstProduct = null, workspaceMemberships = [] } = {}) {
   const source = await sourcePromise;
   const state = { membershipQueries: [], productWrites: [], audits: [], statusWrites: [], auditReads: [], transactions: 0 };
   const tx = {
@@ -22,6 +22,8 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
     pharmacyProduct: {
       create: async (query) => { state.productWrites.push({ type: "create", ...query }); return { id: "product-new" }; },
       updateMany: async (query) => { state.productWrites.push({ type: "update", ...query }); return { count: updateCount }; },
+      deleteMany: async (query) => { state.productWrites.push({ type: "delete", ...query }); return { count: deleteCount }; },
+      findFirst: async () => findFirstProduct,
       findMany: async () => [],
     },
     pharmacyAuditEvent: {
@@ -50,6 +52,11 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
     canManagePharmacy,
     canTransitionPharmacy,
     normalizeLicenseKey,
+    validateProductDates,
+    isProductExpired,
+    parseDateOnly,
+    formatDateOnly,
+    serializePharmacyProduct,
   };
   const transformed = source
     .replace('"use server";', "")
@@ -57,9 +64,9 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { verifyAdmin } from "@/actions/admin";', "const { verifyAdmin } = dependencies;")
-    .replace('import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } from "@/lib/pharmacy-workflow.mjs";', "const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } = dependencies;")
+    .replace(/import \{[\s\S]*?\} from ["']@\/lib\/pharmacy-workflow\.mjs["'];/, "const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, validateProductDates, isProductExpired, parseDateOnly, formatDateOnly, serializePharmacyProduct } = dependencies;")
     .replaceAll("export async function", "async function")
-    .concat("\nreturn { savePharmacyProduct, updatePharmacyStatus, getPharmacyWorkspace };");
+    .concat("\nreturn { savePharmacyProduct, deletePharmacyProduct, updatePharmacyStatus, getPharmacyWorkspace };");
   return { ...new Function("dependencies", transformed)(dependencies), state };
 }
 
@@ -121,3 +128,54 @@ test("Pharmacy Admin review reasons are returned only to the owner", async () =>
   assert.equal(Object.hasOwn(staffWorkspace.auditEvents[0], "reason"), false);
   assert.equal(Object.hasOwn(staff.state.auditReads[0].select, "reason"), false);
 });
+
+test("duplicate catalog product submission within 30s is deduplicated idempotently", async () => {
+  const existingProduct = { id: "existing-1", price: "15.00", description: "Pain relief" };
+  const { savePharmacyProduct, state } = await loadActions({
+    membership: verifiedMembership,
+    findFirstProduct: existingProduct,
+  });
+
+  const result = await savePharmacyProduct(form({
+    pharmacyId: "pharmacy-a",
+    name: "Paracetamol 500mg",
+    price: "15.00",
+    description: "Pain relief",
+  }));
+
+  assert.equal(result.success, true);
+  // Verify no new product was created in the database
+  assert.equal(state.productWrites.length, 0);
+  assert.equal(state.audits.length, 0);
+});
+
+test("deletePharmacyProduct requires verified manager or owner role and logs audit", async () => {
+  const manager = await loadActions({ membership: verifiedMembership, deleteCount: 1 });
+  const result = await manager.deletePharmacyProduct(form({ pharmacyId: "pharmacy-a", productId: "prod-1" }));
+  assert.equal(result.success, true);
+  assert.deepEqual(manager.state.productWrites[0], {
+    type: "delete",
+    where: { id: "prod-1", pharmacyId: "pharmacy-a" },
+  });
+  assert.equal(manager.state.audits[0].data.action, "PRODUCT_DELETED");
+});
+
+test("deletePharmacyProduct rejects unauthorized users and staff members", async () => {
+  const staffMembership = { ...verifiedMembership, role: "STAFF" };
+  const staff = await loadActions({ membership: staffMembership });
+  await assert.rejects(
+    staff.deletePharmacyProduct(form({ pharmacyId: "pharmacy-a", productId: "prod-1" })),
+    /A verified pharmacy and authorized membership are required|membership required/
+  );
+  assert.equal(staff.state.productWrites.length, 0);
+});
+
+test("deletePharmacyProduct rejects deletion if product does not belong to the pharmacy", async () => {
+  const manager = await loadActions({ membership: verifiedMembership, deleteCount: 0 });
+  await assert.rejects(
+    manager.deletePharmacyProduct(form({ pharmacyId: "pharmacy-a", productId: "foreign-prod" })),
+    /Product not found or does not belong to this pharmacy/
+  );
+  assert.equal(manager.state.audits.length, 0);
+});
+
