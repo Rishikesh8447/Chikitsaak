@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { getCurrentUser } from "@/actions/onboarding";
 import { getPharmacyWorkspace } from "@/actions/pharmacy";
 import { PharmacyApplicationForm, PharmacyMemberActions, PharmacyMemberForm, PharmacyProductAvailabilityForm, PharmacyProductForm } from "@/components/pharmacy-forms";
+import { serializePharmacyProduct } from "@/lib/pharmacy-workflow.mjs";
 
 function label(value) { return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
@@ -21,7 +22,8 @@ export default async function PharmacyWorkspacePage({ searchParams }) {
     <Card><CardHeader><CardTitle>Pharmacy application</CardTitle></CardHeader><CardContent><PharmacyApplicationForm /></CardContent></Card>
   </main>;
 
-  const { selected, memberships, products, auditEvents, team } = workspace;
+  const { selected, memberships, products: rawProducts, auditEvents, team } = workspace;
+  const products = (rawProducts || []).map(serializePharmacyProduct);
   return <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-7 sm:px-6 sm:py-9">
     <PageHeader title={selected.name} description="Manage this pharmacy organization and its product catalog." backLink="/laboratory" backLabel="Healthcare services" />
     {memberships.length > 1 && <nav aria-label="Your pharmacies" className="flex flex-wrap gap-2">{memberships.map((entry) => <Button key={entry.id} variant={entry.pharmacyId === selected.id ? "default" : "outline"} size="sm" render={<Link href={`/pharmacy/workspace?pharmacyId=${entry.pharmacyId}`} />}>{entry.pharmacy.name}</Button>)}</nav>}

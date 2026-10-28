@@ -95,7 +95,7 @@ export async function getCurrentUser() {
 
     return user;
   } catch (error) {
-    console.error("Failed to get user information:", error);
+    console.error("Failed to get user information:", error?.message || error);
     throw new Error("Unable to load your account right now. Please try again later.");
   }
 }

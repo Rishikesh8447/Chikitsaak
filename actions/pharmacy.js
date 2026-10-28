@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/prisma";
 import { verifyAdmin } from "@/actions/admin";
-import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } from "@/lib/pharmacy-workflow.mjs";
+import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, serializePharmacyProduct } from "@/lib/pharmacy-workflow.mjs";
 
 const transactionOptions = { isolationLevel: "Serializable", timeout: 15_000 };
 
@@ -111,11 +111,12 @@ export async function getPharmacyWorkspace(pharmacyId) {
   if (!selectedMembership) return { selected: null, memberships: [] };
   const verified = selectedMembership.pharmacy.status === "VERIFIED";
   const isOwner = selectedMembership.role === "OWNER";
-  const [products, auditEvents, team] = await Promise.all([
+  const [rawProducts, auditEvents, team] = await Promise.all([
     verified ? db.pharmacyProduct.findMany({ where: { pharmacyId: selectedMembership.pharmacyId }, orderBy: { name: "asc" }, take: 200 }) : [],
     verified ? db.pharmacyAuditEvent.findMany({ where: { pharmacyId: selectedMembership.pharmacyId }, select: { action: true, fromStatus: true, toStatus: true, ...(isOwner ? { reason: true } : {}), createdAt: true }, orderBy: { createdAt: "desc" }, take: 50 }) : [],
     selectedMembership.role === "OWNER" && verified ? db.pharmacyMembership.findMany({ where: { pharmacyId: selectedMembership.pharmacyId, status: "ACTIVE" }, select: { id: true, role: true, user: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } }) : [],
   ]);
+  const products = rawProducts.map(serializePharmacyProduct);
   return {
     selected: { ...selectedMembership.pharmacy, statusReason: isOwner ? selectedMembership.pharmacy.statusReason : null, membershipRole: selectedMembership.role },
     memberships: memberships.map((membership) => ({ ...membership, pharmacy: { ...membership.pharmacy, statusReason: membership.role === "OWNER" ? membership.pharmacy.statusReason : null } })),

@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const { join } = require("node:path");
-const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } = require("../lib/pharmacy-workflow.mjs");
+const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, serializePharmacyProduct } = require("../lib/pharmacy-workflow.mjs");
 
 const sourcePromise = readFile(join(__dirname, "..", "actions", "pharmacy.js"), "utf8");
 
@@ -50,6 +50,7 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
     canManagePharmacy,
     canTransitionPharmacy,
     normalizeLicenseKey,
+    serializePharmacyProduct,
   };
   const transformed = source
     .replace('"use server";', "")
@@ -57,7 +58,7 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { verifyAdmin } from "@/actions/admin";', "const { verifyAdmin } = dependencies;")
-    .replace('import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } from "@/lib/pharmacy-workflow.mjs";', "const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey } = dependencies;")
+    .replace(/import \{[\s\S]*?\} from ["']@\/lib\/pharmacy-workflow\.mjs["'];/, "const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, serializePharmacyProduct } = dependencies;")
     .replaceAll("export async function", "async function")
     .concat("\nreturn { savePharmacyProduct, updatePharmacyStatus, getPharmacyWorkspace };");
   return { ...new Function("dependencies", transformed)(dependencies), state };
