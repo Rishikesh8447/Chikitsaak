@@ -16,7 +16,7 @@ test("partner header navigation is derived from active organization memberships"
   const patientLinks = header.match(/PATIENT:\s*\[([\s\S]*?)\n  \],/);
   const doctorLinks = header.match(/DOCTOR:\s*\[([\s\S]*?)\n  \],/);
   assert.ok(patientLinks);
-  assert.match(patientLinks[1], /href: "\/pharmacy\/workspace", label: "Pharmacy"/);
+  assert.match(patientLinks[1], /href: "\/pharmacy", label: "Pharmacy"/);
   assert.ok(doctorLinks);
   assert.doesNotMatch(doctorLinks[1], /pharmacy\/workspace|Pharmacy partner/);
   assert.match(header, /ADMIN: \[\{ href: "\/admin", label: "Administration"/);

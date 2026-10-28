@@ -43,6 +43,7 @@ async function loadActions({ clerkUserId = "clerk-a", existingUser = true } = {}
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
+    .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const measureServerTiming = async (_l, cb) => cb();")
     .replaceAll("export async function", "async function")
     .concat("\nreturn { getMyNotifications, markNotificationRead, markAllNotificationsRead };");
   return { ...new Function("dependencies", transformed)(dependencies), state };

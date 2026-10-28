@@ -16,9 +16,8 @@ async function currentDatabaseUser() {
 }
 
 export async function getMyNotifications() {
-  const { userId } = await measureServerTiming("notifications.auth", () => auth());
-  if (!userId) throw new Error("Unauthorized");
-  const where = { user: { is: { clerkUserId: userId } } };
+  const user = await currentDatabaseUser();
+  const where = { userId: user.id };
   const [notifications, unreadCount] = await Promise.all([
     measureServerTiming("notifications.listQuery", () =>
       db.notification.findMany({

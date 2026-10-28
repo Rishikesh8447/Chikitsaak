@@ -52,6 +52,7 @@ test("serializePharmacyProduct converts Prisma Decimal to plain serializable str
   assert.equal(serialized.updatedAt, "2026-02-01T12:00:00.000Z");
 
   // 5. Plain object check matches Next.js Client Component boundary check
+  // JSON serialization and deserialization should produce identical output
   const jsonRoundtrip = JSON.parse(JSON.stringify(serialized));
   assert.deepEqual(jsonRoundtrip, serialized);
 });
@@ -88,7 +89,9 @@ test("pharmacy workspace page serializes products before passing to Client Compo
 
   assert.match(pageSrc, /serializePharmacyProduct/);
   assert.match(pageSrc, /products\s*=\s*\(rawProducts\s*\|\|\s*\[\]\)\.map\(serializePharmacyProduct\)/);
+  assert.match(pageSrc, /<PharmacyProductEditButton\s+pharmacyId=\{selected\.id\}\s+product=\{product\}\s*\/>/);
   assert.match(pageSrc, /<PharmacyProductAvailabilityForm\s+pharmacyId=\{selected\.id\}\s+product=\{product\}\s*\/>/);
+  assert.match(pageSrc, /<PharmacyProductDeleteButton\s+pharmacyId=\{selected\.id\}\s+product=\{product\}\s*\/>/);
 });
 
 test("lib/prisma.js tunes connect_timeout and pool_timeout for serverless databases", () => {

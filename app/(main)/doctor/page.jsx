@@ -78,7 +78,7 @@ export default async function DoctorDashboardPage({ searchParams }) {
         </div>
 
         <div className="min-w-0 w-full space-y-6">
-          <PageHeader icon={<Stethoscope />} title={`Welcome, Dr. ${user.name || "Doctor"}`} description="Your practice overview and upcoming work." backLink={null} />
+          <PageHeader identity={{ label: "Doctor Dashboard", icon: Stethoscope }} icon={<Stethoscope />} title={`Welcome, Dr. ${user.name || "Doctor"}`} description="Your practice overview and upcoming work." backLink={null} />
           <ConsultationPriceForm priceRupees={user.consultationPriceRupees} />
           <section aria-label="Practice summary" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-lg border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Today&apos;s appointments</p><p className="mt-1 text-2xl font-semibold tracking-tight">{todayAppointments.length}</p></div>

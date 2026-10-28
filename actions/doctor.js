@@ -476,7 +476,25 @@ export async function getDoctorAppointments() {
       },
       include: {
         patient: { select: { id: true, name: true, email: true, imageUrl: true } },
-        prescription: { select: { id: true } },
+        prescription: {
+          select: {
+            id: true,
+            diagnosis: true,
+            generalInstructions: true,
+            followUpRequired: true,
+            followUpDays: true,
+            medicines: {
+              select: {
+                id: true,
+                name: true,
+                dosage: true,
+                frequency: true,
+                duration: true,
+                instructions: true,
+              },
+            },
+          },
+        },
         payment: { select: { method: true, status: true, amountRupees: true, cashCollection: { select: { collectedAt: true } } } },
       },
       orderBy: {
@@ -488,6 +506,17 @@ export async function getDoctorAppointments() {
     return { appointments };
   } catch (error) {
     throw new Error("Failed to fetch appointments. Please try again.");
+  }
+}
+
+async function executeWithRetry(operation) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error?.code !== "P2034" || attempt >= 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 20 * attempt));
+    }
   }
 }
 
@@ -520,29 +549,31 @@ export async function cancelAppointment(formData) {
     }
 
     // Resolve ownership and accounting from the transaction's consistent database view.
-    const cancelledDetails = await db.$transaction(
-      async (tx) => {
-        await cancelAppointmentInTransaction(tx, {
-          appointmentId,
-          actorId: user.id,
-          notify: (transaction, appointment) => createAppointmentNotificationPair(transaction, appointment, {
-            type: "APPOINTMENT_CANCELLED",
-            title: "Appointment cancelled",
-            patientMessage: "Your appointment was cancelled.",
-            doctorMessage: "An appointment was cancelled.",
-            key: `appointment:${appointment.id}:cancelled`,
-          }),
-        });
-        return tx.appointment.findUnique({
-          where: { id: appointmentId },
-          select: {
-            startTime: true,
-            patient: { select: { id: true, name: true, email: true } },
-            doctor: { select: { id: true, name: true, email: true } },
-          },
-        });
-      },
-      { isolationLevel: "Serializable" }
+    const cancelledDetails = await executeWithRetry(() =>
+      db.$transaction(
+        async (tx) => {
+          await cancelAppointmentInTransaction(tx, {
+            appointmentId,
+            actorId: user.id,
+            notify: (transaction, appointment) => createAppointmentNotificationPair(transaction, appointment, {
+              type: "APPOINTMENT_CANCELLED",
+              title: "Appointment cancelled",
+              patientMessage: "Your appointment was cancelled.",
+              doctorMessage: "An appointment was cancelled.",
+              key: `appointment:${appointment.id}:cancelled`,
+            }),
+          });
+          return tx.appointment.findUnique({
+            where: { id: appointmentId },
+            select: {
+              startTime: true,
+              patient: { select: { id: true, name: true, email: true } },
+              doctor: { select: { id: true, name: true, email: true } },
+            },
+          });
+        },
+        { isolationLevel: "Serializable", timeout: 15_000, maxWait: 10_000 }
+      )
     );
 
     if (cancelledDetails?.patient?.email) {
@@ -574,8 +605,19 @@ export async function cancelAppointment(formData) {
     return { success: true };
   } catch (error) {
     console.error("Failed to cancel appointment:", error);
-    if (error instanceof Error && Object.values(CANCELLATION_ERRORS).includes(error.message)) {
-      throw error;
+    if (error instanceof Error) {
+      const safeErrors = [
+        ...Object.values(CANCELLATION_ERRORS),
+        "Unauthorized",
+        "User not found",
+        "Appointment ID is required",
+        "Appointment not found",
+        "You are not authorized to cancel this appointment",
+        "Doctor verification is required",
+      ];
+      if (safeErrors.includes(error.message)) {
+        throw error;
+      }
     }
     throw new Error("Failed to cancel appointment. Please try again.");
   }
@@ -690,16 +732,6 @@ export async function markAppointmentCompleted(formData) {
       throw new Error("This appointment cannot be marked as completed");
     }
 
-    // Check if current time is after the appointment end time
-    const now = new Date();
-    const appointmentEndTime = new Date(appointment.endTime);
-
-    if (now < appointmentEndTime) {
-      throw new Error(
-        "Cannot mark appointment as completed before the scheduled end time"
-      );
-    }
-
     // Update the appointment status to COMPLETED
     const completed = await db.appointment.updateMany({
       where: { id: appointmentId, doctorId: doctor.id, status: "IN_PROGRESS" },
@@ -709,6 +741,7 @@ export async function markAppointmentCompleted(formData) {
     const updatedAppointment = await db.appointment.findUnique({ where: { id: appointmentId } });
 
     revalidatePath("/doctor");
+    revalidatePath("/appointments");
     return { success: true, appointment: updatedAppointment };
   } catch (error) {
     console.error("Failed to mark appointment as completed:", error);
@@ -768,7 +801,7 @@ export async function updateAppointmentStatus(formData) {
     }
   }
   const now = new Date();
-  if (["COMPLETED", "NO_SHOW"].includes(nextStatus) && now < appointment.endTime) {
+  if (nextStatus === "NO_SHOW" && now < appointment.endTime) {
     return { success: false, error: "This appointment has not ended yet" };
   }
   if (nextStatus === "IN_PROGRESS" && (now < new Date(appointment.startTime) || now >= new Date(appointment.endTime))) {

@@ -31,7 +31,26 @@ function useLabSubmit(action, successMessage, onSuccess) {
       else router.refresh();
     }
   }, [data, onSuccess, router, successMessage]);
-  return { loading, fn, error: error?.message || data?.error };
+
+  const handleSubmit = useCallback(
+    async (e) => {
+      if (e && typeof e.preventDefault === "function") {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const submitter = e.nativeEvent?.submitter;
+        const formData = new FormData(form);
+        if (submitter && submitter.name && submitter.value) {
+          formData.set(submitter.name, submitter.value);
+        }
+        await fn(formData);
+      } else {
+        await fn(e);
+      }
+    },
+    [fn]
+  );
+
+  return { loading, fn, handleSubmit, error: error?.message || data?.error };
 }
 
 const inputClass = "grid gap-1.5 text-sm font-medium text-foreground";
@@ -43,8 +62,8 @@ function ActionError({ error }) {
 export function LaboratoryApplicationForm({ resubmissionOfLaboratoryId }) {
   const router = useRouter();
   const onSuccess = useCallback(({ laboratoryId }) => router.push(`/laboratory/workspace?laboratoryId=${laboratoryId}`), [router]);
-  const { loading, fn, error } = useLabSubmit(submitLaboratoryApplication, "Application submitted for review", onSuccess);
-  return <form action={fn} className="grid gap-4 sm:grid-cols-2">
+  const { loading, handleSubmit, error } = useLabSubmit(submitLaboratoryApplication, "Application submitted for review", onSuccess);
+  return <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
     {resubmissionOfLaboratoryId && <input type="hidden" name="resubmissionOfLaboratoryId" value={resubmissionOfLaboratoryId} />}
     <label className={inputClass}>Laboratory display name<Input name="name" required maxLength={160} /></label>
     <label className={inputClass}>Legal name<Input name="legalName" required maxLength={200} /></label>
@@ -60,8 +79,8 @@ export function LaboratoryApplicationForm({ resubmissionOfLaboratoryId }) {
 }
 
 export function DoctorLabOrderForm({ appointments, tests }) {
-  const { loading, fn, error } = useLabSubmit(createDoctorLabOrder, "Test order sent to the patient");
-  return <form action={fn} className="space-y-4">
+  const { loading, handleSubmit, error } = useLabSubmit(createDoctorLabOrder, "Test order sent to the patient");
+  return <form onSubmit={handleSubmit} className="space-y-4">
     <label className={inputClass}>Patient appointment
       <select name="appointmentId" required defaultValue="" className="h-11 rounded-md border border-input bg-card px-3 text-sm">
         <option value="" disabled>Select an active or completed appointment</option>
@@ -80,9 +99,9 @@ export function DoctorLabOrderForm({ appointments, tests }) {
 
 export function PatientBookingForm({ laboratories }) {
   const [laboratoryId, setLaboratoryId] = useState(laboratories[0]?.id || "");
-  const { loading, fn, error } = useLabSubmit(createPatientLabOrder, "Laboratory booking request submitted");
+  const { loading, handleSubmit, error } = useLabSubmit(createPatientLabOrder, "Laboratory booking request submitted");
   const selected = laboratories.find((lab) => lab.id === laboratoryId);
-  return <form action={fn} className="space-y-4">
+  return <form onSubmit={handleSubmit} className="space-y-4">
     <label className={inputClass}>Laboratory
       <select name="laboratoryId" required value={laboratoryId} onChange={(event) => setLaboratoryId(event.target.value)} className="h-11 rounded-md border border-input bg-card px-3 text-sm">
         {laboratories.map((lab) => <option key={lab.id} value={lab.id}>{lab.name} · {lab.city}, {lab.state}</option>)}
@@ -99,10 +118,10 @@ export function PatientBookingForm({ laboratories }) {
 }
 
 export function PatientChooseLabForm({ orderId, laboratories }) {
-  const { loading, fn, error } = useLabSubmit(bookDoctorLabOrder, "Laboratory selected; the lab has been notified");
+  const { loading, handleSubmit, error } = useLabSubmit(bookDoctorLabOrder, "Laboratory selected; the lab has been notified");
   const [laboratoryId, setLaboratoryId] = useState("");
   const selected = laboratories.find((lab) => lab.id === laboratoryId);
-  return <form action={fn} className="flex flex-wrap items-end gap-2">
+  return <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
     <input type="hidden" name="labOrderId" value={orderId} />
     <label className={`${inputClass} min-w-52 flex-1`}>Choose a laboratory
       <select name="laboratoryId" required value={laboratoryId} onChange={(event) => setLaboratoryId(event.target.value)} className="h-10 rounded-md border border-input bg-card px-3 text-sm">
@@ -116,13 +135,13 @@ export function PatientChooseLabForm({ orderId, laboratories }) {
 }
 
 export function PatientRetryLabOrderForm({ orderId }) {
-  const { loading, fn, error } = useLabSubmit(retryRejectedLabOrder, "Choose another laboratory to continue");
-  return <form action={fn}><input type="hidden" name="labOrderId" value={orderId} /><ActionError error={error} /><Button type="submit" size="sm" variant="outline" disabled={loading}>{loading ? "Reopening…" : "Choose another laboratory"}</Button></form>;
+  const { loading, handleSubmit, error } = useLabSubmit(retryRejectedLabOrder, "Choose another laboratory to continue");
+  return <form onSubmit={handleSubmit}><input type="hidden" name="labOrderId" value={orderId} /><ActionError error={error} /><Button type="submit" size="sm" variant="outline" disabled={loading}>{loading ? "Reopening…" : "Choose another laboratory"}</Button></form>;
 }
 
 export function LaboratoryOfferingForm({ laboratoryId, tests }) {
-  const { loading, fn, error } = useLabSubmit(saveLaboratoryOffering, "Test offering saved");
-  return <form action={fn} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-2">
+  const { loading, handleSubmit, error } = useLabSubmit(saveLaboratoryOffering, "Test offering saved");
+  return <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-2">
     <input type="hidden" name="laboratoryId" value={laboratoryId} />
     <label className={inputClass}>Test
       <select name="labTestId" required defaultValue="" className="h-11 rounded-md border border-input bg-card px-3 text-sm"><option value="" disabled>Select a catalog test</option>{tests.map((test) => <option key={test.id} value={test.id}>{test.name}</option>)}</select>
@@ -135,8 +154,8 @@ export function LaboratoryOfferingForm({ laboratoryId, tests }) {
 }
 
 export function LaboratoryMemberForm({ laboratoryId }) {
-  const { loading, fn, error } = useLabSubmit(addLaboratoryMember, "Member added");
-  return <form action={fn} className="flex flex-wrap items-end gap-2">
+  const { loading, handleSubmit, error } = useLabSubmit(addLaboratoryMember, "Member added");
+  return <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
     <input type="hidden" name="laboratoryId" value={laboratoryId} />
     <label className={`${inputClass} min-w-52 flex-1`}>Existing account email<Input name="email" type="email" required maxLength={254} /></label>
     <label className={inputClass}>Role<select name="role" className="h-11 rounded-md border border-input bg-card px-3 text-sm"><option value="STAFF">Staff</option><option value="MANAGER">Manager</option></select></label>
@@ -145,8 +164,8 @@ export function LaboratoryMemberForm({ laboratoryId }) {
 }
 
 export function LaboratoryMemberActions({ laboratoryId, member }) {
-  const { loading, fn, error } = useLabSubmit(updateLaboratoryMember, "Member access updated");
-  return <form action={fn} className="mt-2 flex flex-wrap items-center gap-2">
+  const { loading, handleSubmit, error } = useLabSubmit(updateLaboratoryMember, "Member access updated");
+  return <form onSubmit={handleSubmit} className="mt-2 flex flex-wrap items-center gap-2">
     <input type="hidden" name="laboratoryId" value={laboratoryId} /><input type="hidden" name="membershipId" value={member.id} />
     <select name="role" defaultValue={member.role} aria-label={`Role for ${member.user.name || member.user.email}`} className="h-8 rounded-md border border-input bg-card px-2 text-xs"><option value="STAFF">Staff</option><option value="MANAGER">Manager</option></select>
     <Button type="submit" name="action" value="change-role" size="sm" variant="outline" disabled={loading}>Save role</Button>
@@ -155,8 +174,8 @@ export function LaboratoryMemberActions({ laboratoryId, member }) {
 }
 
 export function OfferingAvailabilityForm({ laboratoryId, offeringId, available }) {
-  const { loading, fn, error } = useLabSubmit(setLaboratoryOfferingAvailability, available ? "Offering disabled" : "Offering enabled");
-  return <form action={fn} className="inline-flex gap-1">
+  const { loading, handleSubmit, error } = useLabSubmit(setLaboratoryOfferingAvailability, available ? "Offering disabled" : "Offering enabled");
+  return <form onSubmit={handleSubmit} className="inline-flex gap-1">
     <input type="hidden" name="laboratoryId" value={laboratoryId} /><input type="hidden" name="offeringId" value={offeringId} /><input type="hidden" name="available" value={String(!available)} />
     <Button type="submit" size="sm" variant="outline" disabled={loading}>{available ? "Disable" : "Enable"}</Button><ActionError error={error} />
   </form>;
@@ -164,7 +183,14 @@ export function OfferingAvailabilityForm({ laboratoryId, offeringId, available }
 
 export function LaboratoryOrderTransitionForm({ laboratoryId, orderId, status }) {
   const { loading, fn, error } = useLabSubmit(transitionLabOrder, "Laboratory order updated");
-  const submit = async (formData) => {
+  const submit = async (e) => {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    const form = e?.currentTarget || e;
+    const submitter = e?.nativeEvent?.submitter;
+    const formData = new FormData(form);
+    if (submitter && submitter.name && submitter.value) {
+      formData.set(submitter.name, submitter.value);
+    }
     const localCollectionTime = formData.get("collectionAt");
     if (typeof localCollectionTime === "string" && localCollectionTime) {
       const utcTime = new Date(localCollectionTime);
@@ -172,7 +198,7 @@ export function LaboratoryOrderTransitionForm({ laboratoryId, orderId, status })
     }
     await fn(formData);
   };
-  return <form action={submit} className="mt-3 flex flex-wrap items-end gap-2">
+  return <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-2">
     <input type="hidden" name="laboratoryId" value={laboratoryId} /><input type="hidden" name="labOrderId" value={orderId} />
     {status === "REQUESTED" && <>
       <label className="grid gap-1 text-xs">Reason for rejection (required to reject)<Input name="collectionNotes" maxLength={1000} /></label>
@@ -190,8 +216,8 @@ export function LaboratoryOrderTransitionForm({ laboratoryId, orderId, status })
 }
 
 export function LaboratoryResultForm({ laboratoryId, orderId }) {
-  const { loading, fn, error } = useLabSubmit(submitLaboratoryResult, "Test result submitted to the patient");
-  return <form action={fn} className="mt-3 grid gap-2 rounded-md border border-border p-3">
+  const { loading, handleSubmit, error } = useLabSubmit(submitLaboratoryResult, "Test result submitted to the patient");
+  return <form onSubmit={handleSubmit} className="mt-3 grid gap-2 rounded-md border border-border p-3">
     <input type="hidden" name="laboratoryId" value={laboratoryId} />
     <input type="hidden" name="labOrderId" value={orderId} />
     <label className={inputClass}>Test result<Textarea name="result" required maxLength={10_000} rows={5} placeholder="Enter the laboratory result and relevant interpretation." /></label>

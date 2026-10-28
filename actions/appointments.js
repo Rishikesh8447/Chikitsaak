@@ -201,7 +201,15 @@ export async function authorizeVideoCall(formData) {
 export async function getVideoCallCredentials(appointmentId) {
   const { userId } = await auth();
   if (!userId || typeof appointmentId !== "string") throw new Error("Unauthorized");
-  const user = await db.user.findUnique({ where: { clerkUserId: userId } });
+  let user = await db.user.findUnique({ where: { clerkUserId: userId } });
+  if (!user) {
+    try {
+      const { checkUser } = await import("@/lib/checkUser");
+      user = await checkUser();
+    } catch {
+      // fallback
+    }
+  }
   const appointment = await db.appointment.findUnique({ where: { id: appointmentId } });
   if (!user || !appointment || (appointment.doctorId !== user.id && appointment.patientId !== user.id)) throw new Error("You are not authorized to join this call");
   if (user.role === "DOCTOR" && user.verificationStatus !== "VERIFIED") throw new Error("Doctor verification is required to join calls");
@@ -222,7 +230,7 @@ export async function getVideoCallCredentials(appointmentId) {
     logVideoProvisioningFailure("generateClientToken", error);
     throw new Error("Video call authorization failed");
   }
-  return { success: true, videoSessionId: sessionId, token, appId: formatVonageApplicationId(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID) };
+  return { success: true, videoSessionId: sessionId, token, appId: formatVonageApplicationId(process.env.NEXT_PUBLIC_VONAGE_APPLICATION_ID), userRole: user.role };
 }
 
 /**
@@ -314,61 +322,65 @@ export async function rescheduleAppointment(formData) {
   const startTime = new Date(startValue);
   const endTime = new Date(endValue);
   if (typeof appointmentId !== "string" || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime || (endTime - startTime) !== 20 * 60 * 1000 || startTime <= new Date()) throw new Error("Invalid rescheduling details");
-  const result = await db.$transaction(async (tx) => {
-    const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" }, select: { id: true, name: true, email: true } });
-    const appointment = await tx.appointment.findUnique({
-      where: { id: appointmentId },
-      include: { payment: { select: {
-        method: true,
-        status: true,
-        verifiedAt: true,
-        refundStatus: true,
-        cashCollection: { select: { paymentId: true } },
-      } } },
-    });
-    if (!patient || !appointment || appointment.patientId !== patient.id) throw new Error("Appointment not found or not authorized");
-    if (!["SCHEDULED", "CONFIRMED"].includes(appointment.status)) throw new Error("This appointment cannot be rescheduled");
-    const doctor = await tx.user.findUnique({ where: { id: appointment.doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true, name: true, email: true } });
-    if (!doctor) throw new Error("Doctor not found or not verified");
-    if (appointment.payment) {
-      const payment = appointment.payment;
-      const providerPaymentVerified = payment.status === "PAID"
-        && Boolean(payment.verifiedAt)
-        && payment.refundStatus === "NOT_REQUIRED";
-      const cashPaymentEligible = appointment.consultationMode === "OFFLINE"
-        && payment.method === "CASH"
-        && payment.refundStatus === "NOT_REQUIRED"
-        && (payment.status === "CASH_DUE" || (payment.status === "PAID" && Boolean(payment.cashCollection)));
-      const verifiedOnlinePayment = appointment.consultationMode === "ONLINE"
-        && payment.method === "ONLINE"
-        && providerPaymentVerified;
-      const verifiedOfflineUpiPayment = appointment.consultationMode === "OFFLINE"
-        && payment.method === "UPI_QR"
-        && providerPaymentVerified;
-      if (!cashPaymentEligible && !verifiedOnlinePayment && !verifiedOfflineUpiPayment) {
-        throw new Error("This appointment's payment state does not permit rescheduling");
+  const result = await withSerializableRetries(() =>
+    db.$transaction(async (tx) => {
+      const patient = await tx.user.findUnique({ where: { clerkUserId: userId, role: "PATIENT" }, select: { id: true, name: true, email: true } });
+      const appointment = await tx.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { payment: { select: {
+          method: true,
+          status: true,
+          verifiedAt: true,
+          refundStatus: true,
+          cashCollection: { select: { paymentId: true } },
+        } } },
+      });
+      if (!patient || !appointment || appointment.patientId !== patient.id) throw new Error("Appointment not found or not authorized");
+      if (!["SCHEDULED", "CONFIRMED"].includes(appointment.status)) throw new Error("This appointment cannot be rescheduled");
+      const doctor = await tx.user.findUnique({ where: { id: appointment.doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" }, select: { id: true, name: true, email: true } });
+      if (!doctor) throw new Error("Doctor not found or not verified");
+      if (appointment.payment) {
+        const payment = appointment.payment;
+        const providerPaymentVerified = payment.status === "PAID"
+          && Boolean(payment.verifiedAt)
+          && payment.refundStatus === "NOT_REQUIRED";
+        const cashPaymentEligible = appointment.consultationMode === "OFFLINE"
+          && payment.method === "CASH"
+          && payment.refundStatus === "NOT_REQUIRED"
+          && (payment.status === "CASH_DUE" || (payment.status === "PAID" && Boolean(payment.cashCollection)));
+        const verifiedOnlinePayment = appointment.consultationMode === "ONLINE"
+          && payment.method === "ONLINE"
+          && providerPaymentVerified;
+        const verifiedOfflineUpiPayment = appointment.consultationMode === "OFFLINE"
+          && payment.method === "UPI_QR"
+          && providerPaymentVerified;
+        if (!cashPaymentEligible && !verifiedOnlinePayment && !verifiedOfflineUpiPayment) {
+          throw new Error("This appointment's payment state does not permit rescheduling");
+        }
       }
-    }
-    const windows = await tx.availability.findMany({ where: { doctorId: appointment.doctorId, status: "AVAILABLE" } });
-    const minutes = (value) => value.getHours() * 60 + value.getMinutes();
-    const day = startTime.getDay();
-    if (!windows.some((window) => (window.dayOfWeek === null || window.dayOfWeek === day) && (!window.blockedDate || new Date(window.blockedDate).toDateString() !== startTime.toDateString()) && minutes(new Date(window.startTime)) <= minutes(startTime) && minutes(new Date(window.endTime)) >= minutes(endTime))) throw new Error("The selected time is outside the doctor's availability");
-    const conflict = { startTime: { lt: endTime }, endTime: { gt: startTime } };
-    const activeHoldOrBooking = { OR: [{ status: { in: BOOKING_STATUSES } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } }] };
-    const [doctorConflict, patientConflict] = await Promise.all([
-      tx.appointment.findFirst({ where: { id: { not: appointment.id }, doctorId: appointment.doctorId, ...activeHoldOrBooking, ...conflict } }),
-      tx.appointment.findFirst({ where: { id: { not: appointment.id }, patientId: patient.id, ...activeHoldOrBooking, ...conflict } }),
-    ]);
-    if (doctorConflict || patientConflict) throw new Error("This slot is no longer available. Please select another time.");
-    await tx.appointmentReminder.deleteMany({ where: { appointmentId: appointment.id } });
-    const updated = await tx.appointment.update({ where: { id: appointment.id }, data: { startTime, endTime } });
-    await createAppointmentNotificationPair(tx, updated, { type: "APPOINTMENT_RESCHEDULED", title: "Appointment rescheduled", patientMessage: "Your appointment was rescheduled.", doctorMessage: "An appointment was rescheduled.", key: `appointment:${updated.id}:rescheduled:${startTime.toISOString()}` });
-    return {
-      ...updated,
-      patient: { name: patient?.name, email: patient?.email },
-      doctor: { name: doctor?.name, email: doctor?.email },
-    };
-  }, { isolationLevel: "Serializable" });
+      const windows = await tx.availability.findMany({ where: { doctorId: appointment.doctorId, status: "AVAILABLE" } });
+      const minutes = (value) => value.getHours() * 60 + value.getMinutes();
+      const day = startTime.getDay();
+      if (!windows.some((window) => (window.dayOfWeek === null || window.dayOfWeek === day) && (!window.blockedDate || new Date(window.blockedDate).toDateString() !== startTime.toDateString()) && minutes(new Date(window.startTime)) <= minutes(startTime) && minutes(new Date(window.endTime)) >= minutes(endTime))) throw new Error("The selected time is outside the doctor's availability");
+      const conflict = { startTime: { lt: endTime }, endTime: { gt: startTime } };
+      const activeHoldOrBooking = { OR: [{ status: { in: BOOKING_STATUSES } }, { status: "PAYMENT_PENDING", checkoutExpiresAt: { gt: new Date() } }] };
+      const [doctorConflict, patientConflict] = await Promise.all([
+        tx.appointment.findFirst({ where: { id: { not: appointment.id }, doctorId: appointment.doctorId, ...activeHoldOrBooking, ...conflict } }),
+        tx.appointment.findFirst({ where: { id: { not: appointment.id }, patientId: patient.id, ...activeHoldOrBooking, ...conflict } }),
+      ]);
+      if (doctorConflict || patientConflict) throw new Error("This slot is no longer available. Please select another time.");
+      if (typeof tx.appointmentReminder?.deleteMany === "function") {
+        await tx.appointmentReminder.deleteMany({ where: { appointmentId: appointment.id } });
+      }
+      const updated = await tx.appointment.update({ where: { id: appointment.id }, data: { startTime, endTime } });
+      await createAppointmentNotificationPair(tx, updated, { type: "APPOINTMENT_RESCHEDULED", title: "Appointment rescheduled", patientMessage: "Your appointment was rescheduled.", doctorMessage: "An appointment was rescheduled.", key: `appointment:${updated.id}:rescheduled:${startTime.toISOString()}` });
+      return {
+        ...updated,
+        patient: { name: patient?.name, email: patient?.email },
+        doctor: { name: doctor?.name, email: doctor?.email },
+      };
+    }, { isolationLevel: "Serializable", timeout: 15_000, maxWait: 10_000 })
+  );
 
   if (result?.patient?.email) {
     sendAppointmentRescheduledEmail({

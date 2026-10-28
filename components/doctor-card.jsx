@@ -28,7 +28,7 @@ export function DoctorCard({ doctor }) {
             {doctor.description ? <p className="mt-3 line-clamp-3 min-h-[4.5rem] text-sm leading-6 text-muted-foreground">{doctor.description}</p> : <p className="mt-3 min-h-[4.5rem] text-sm leading-6 text-muted-foreground">No professional description provided.</p>}
           </div>
         </div>
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><span className="text-xs text-muted-foreground">Verified care provider</span><Button asChild size="sm" className="min-h-9"><Link href={`/doctors/${encodeURIComponent(specialty)}/${doctor.id}`}><CalendarDays className="size-4" />View profile</Link></Button></div>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><span className="text-xs text-muted-foreground">Verified care provider</span><Button asChild size="sm" className="min-h-9"><Link href={`/doctors/${encodeURIComponent(specialty)}/${doctor.id}`}><CalendarDays className="size-4" />View Profile & Book</Link></Button></div>
       </CardContent>
     </Card>
   );

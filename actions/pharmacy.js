@@ -4,9 +4,25 @@ import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/prisma";
 import { verifyAdmin } from "@/actions/admin";
-import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, serializePharmacyProduct } from "@/lib/pharmacy-workflow.mjs";
+import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, validateProductDates, isProductExpired, parseDateOnly, formatDateOnly, serializePharmacyProduct } from "@/lib/pharmacy-workflow.mjs";
 
-const transactionOptions = { isolationLevel: "Serializable", timeout: 15_000 };
+const transactionOptions = { isolationLevel: "Serializable", timeout: 15_000, maxWait: 10_000 };
+
+let dateColumnsSupported = null;
+async function checkProductDateColumnsSupport(tx) {
+  if (dateColumnsSupported !== null) return dateColumnsSupported;
+  if (!tx || typeof tx.$queryRawUnsafe !== "function") return false;
+  try {
+    const res = await tx.$queryRawUnsafe(`
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'PharmacyProduct' AND column_name = 'expiryDate' LIMIT 1;
+    `);
+    dateColumnsSupported = Array.isArray(res) && res.length > 0;
+  } catch {
+    dateColumnsSupported = false;
+  }
+  return dateColumnsSupported;
+}
 
 async function currentUser(tx = db) {
   const { userId } = await auth();
@@ -104,7 +120,28 @@ export async function getPharmacyWorkspace(pharmacyId) {
   const user = await currentUser();
   const memberships = await db.pharmacyMembership.findMany({
     where: { userId: user.id, status: "ACTIVE" },
-    select: { id: true, pharmacyId: true, role: true, pharmacy: { select: { id: true, name: true, status: true, statusReason: true, city: true, state: true, country: true } } },
+    select: {
+      id: true,
+      pharmacyId: true,
+      role: true,
+      pharmacy: {
+        select: {
+          id: true,
+          name: true,
+          legalName: true,
+          licenseNumber: true,
+          contactEmail: true,
+          contactPhone: true,
+          address: true,
+          city: true,
+          state: true,
+          country: true,
+          status: true,
+          statusReason: true,
+          createdAt: true,
+        },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
   const selectedMembership = pharmacyId ? memberships.find((entry) => entry.pharmacyId === pharmacyId) : memberships[0];
@@ -177,18 +214,103 @@ export async function savePharmacyProduct(formData) {
   const price = Number(priceText);
   if (!Number.isFinite(price) || price > 99_999_999.99) throw new Error("Price is invalid");
 
+  const isAvailableRaw = formData.get("isAvailable");
+  const isAvailable = isAvailableRaw !== null && isAvailableRaw !== undefined
+    ? isAvailableRaw === "true" || isAvailableRaw === "on"
+    : undefined;
+
+  const manufactureDateRaw = formData.get("manufactureDate");
+  const expiryDateRaw = formData.get("expiryDate");
+  const dateValidation = validateProductDates({
+    manufactureDate: manufactureDateRaw ? String(manufactureDateRaw).trim() : null,
+    expiryDate: expiryDateRaw ? String(expiryDateRaw).trim() : null,
+  });
+  if (!dateValidation.valid) throw new Error(dateValidation.error);
+  const { manufactureDate, expiryDate } = dateValidation;
+  const expired = isProductExpired(expiryDate);
+
+  if (isAvailable && expired) {
+    throw new Error("Expired products cannot be made available for dispensing");
+  }
+
   await db.$transaction(async (tx) => {
     await verifiedMembershipFor(tx, user.id, pharmacyId);
+    const hasColumns = await checkProductDateColumnsSupport(tx);
+    const dateData = hasColumns ? {
+      ...(manufactureDate !== undefined ? { manufactureDate } : {}),
+      ...(expiryDate !== undefined ? { expiryDate } : {}),
+    } : {};
+
     if (productId) {
-      const changed = await tx.pharmacyProduct.updateMany({ where: { id: productId, pharmacyId }, data: { name, description, price } });
+      const changed = await tx.pharmacyProduct.updateMany({
+        where: { id: productId, pharmacyId },
+        data: {
+          name,
+          description,
+          price,
+          ...(isAvailable !== undefined ? { isAvailable: expired ? false : isAvailable } : (expired ? { isAvailable: false } : {})),
+          ...dateData,
+        },
+      });
       if (changed.count !== 1) throw new Error("Product does not belong to this pharmacy");
       await audit(tx, { actorUserId: user.id, pharmacyId, entityId: productId, action: "PRODUCT_UPDATED" });
     } else {
-      const product = await tx.pharmacyProduct.create({ data: { pharmacyId, name, description, price } });
+      // Rapid duplicate click protection: check if identical product was created in last 30s
+      if (typeof tx.pharmacyProduct.findFirst === "function") {
+        const recentDuplicate = await tx.pharmacyProduct.findFirst({
+          where: {
+            pharmacyId,
+            name,
+            createdAt: { gte: new Date(Date.now() - 30_000) },
+          },
+          select: { id: true, price: true, description: true },
+        });
+        if (
+          recentDuplicate &&
+          Number(recentDuplicate.price) === price &&
+          (recentDuplicate.description || null) === (description || null)
+        ) {
+          // Idempotent success without creating multiple copies
+          return;
+        }
+      }
+
+      const product = await tx.pharmacyProduct.create({
+        data: {
+          pharmacyId,
+          name,
+          description,
+          price,
+          isAvailable: expired ? false : (isAvailable !== undefined ? isAvailable : true),
+          ...dateData,
+        },
+      });
       await audit(tx, { actorUserId: user.id, pharmacyId, entityId: product.id, action: "PRODUCT_CREATED" });
     }
   }, transactionOptions);
   revalidatePath("/pharmacy/workspace");
+  revalidatePath("/pharmacy");
+  return { success: true };
+}
+
+export async function deletePharmacyProduct(formData) {
+  const user = await currentUser();
+  const pharmacyId = field(formData, "pharmacyId", "Pharmacy", 100);
+  const productId = field(formData, "productId", "Product", 100);
+
+  await db.$transaction(async (tx) => {
+    await verifiedMembershipFor(tx, user.id, pharmacyId, ["OWNER", "MANAGER"]);
+    const deleted = await tx.pharmacyProduct.deleteMany({
+      where: { id: productId, pharmacyId },
+    });
+    if (deleted.count !== 1) {
+      throw new Error("Product not found or does not belong to this pharmacy");
+    }
+    await audit(tx, { actorUserId: user.id, pharmacyId, entityId: productId, action: "PRODUCT_DELETED" });
+  }, transactionOptions);
+
+  revalidatePath("/pharmacy/workspace");
+  revalidatePath("/pharmacy");
   return { success: true };
 }
 
@@ -201,6 +323,18 @@ export async function setPharmacyProductAvailability(formData) {
   const available = availableValue === "true";
   await db.$transaction(async (tx) => {
     await verifiedMembershipFor(tx, user.id, pharmacyId);
+    if (available) {
+      const hasColumns = await checkProductDateColumnsSupport(tx);
+      if (hasColumns && typeof tx.pharmacyProduct.findFirst === "function") {
+        const existing = await tx.pharmacyProduct.findFirst({
+          where: { id: productId, pharmacyId },
+          select: { expiryDate: true },
+        });
+        if (existing?.expiryDate && isProductExpired(existing.expiryDate)) {
+          throw new Error("Expired products cannot be made available for dispensing");
+        }
+      }
+    }
     const changed = await tx.pharmacyProduct.updateMany({ where: { id: productId, pharmacyId }, data: { isAvailable: available } });
     if (changed.count !== 1) throw new Error("Product does not belong to this pharmacy");
     await audit(tx, { actorUserId: user.id, pharmacyId, entityId: productId, action: available ? "PRODUCT_ENABLED" : "PRODUCT_DISABLED" });
@@ -233,6 +367,344 @@ export async function updatePharmacyStatus(formData) {
   }, transactionOptions);
   revalidatePath("/admin");
   revalidatePath("/admin/pharmacy");
+  revalidatePath("/pharmacy/workspace");
+  return { success: true };
+}
+
+export async function getAvailablePharmacyProducts() {
+  const products = await db.pharmacyProduct.findMany({
+    where: {
+      isAvailable: true,
+      pharmacy: { status: "VERIFIED" },
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      price: true,
+      isAvailable: true,
+      pharmacy: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          city: true,
+          state: true,
+          contactPhone: true,
+          contactEmail: true,
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return {
+    products: products.map((product) => ({
+      ...product,
+      price: Number(product.price).toFixed(2),
+    })),
+  };
+}
+
+export async function submitPharmacyDispensingRequest(formData) {
+  const user = await currentUser();
+  const pharmacyId = field(formData, "pharmacyId", "Pharmacy", 100);
+  const itemsRaw = field(formData, "items", "Selected items", 10000);
+  const patientNote = field(formData, "patientNote", "Patient note", 500, false);
+  const prescriptionId = field(formData, "prescriptionId", "Prescription", 100, false);
+
+  let items = [];
+  try {
+    items = JSON.parse(itemsRaw);
+  } catch {
+    throw new Error("Invalid items payload");
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("At least one medicine must be selected");
+  }
+
+  for (const item of items) {
+    if (!item.productId || typeof item.quantity !== "number" || item.quantity <= 0) {
+      throw new Error("Invalid item or quantity in request");
+    }
+  }
+
+  const requestId = crypto.randomUUID();
+
+  await db.$transaction(async (tx) => {
+    const pharmacy = await tx.pharmacy.findUnique({
+      where: { id: pharmacyId },
+      select: { id: true, status: true, name: true },
+    });
+    if (!pharmacy || pharmacy.status !== "VERIFIED") {
+      throw new Error("Pharmacy not found or not currently active for dispensing");
+    }
+
+    const hasColumns = await checkProductDateColumnsSupport(tx);
+    const productIds = items.map((i) => i.productId);
+    const dbProducts = await tx.pharmacyProduct.findMany({
+      where: { id: { in: productIds }, pharmacyId },
+      select: { id: true, name: true, price: true, isAvailable: true, ...(hasColumns ? { expiryDate: true } : {}) },
+    });
+
+    if (dbProducts.length !== productIds.length) {
+      throw new Error("One or more selected products do not belong to this pharmacy");
+    }
+
+    const enrichedItems = [];
+    for (const item of items) {
+      const prod = dbProducts.find((p) => p.id === item.productId);
+      if (!prod.isAvailable) {
+        throw new Error(`${prod.name} is currently unavailable`);
+      }
+      if (prod.expiryDate && isProductExpired(prod.expiryDate)) {
+        throw new Error(`${prod.name} has expired and cannot be dispensed`);
+      }
+      enrichedItems.push({
+        productId: prod.id,
+        name: prod.name,
+        price: Number(prod.price).toFixed(2),
+        quantity: item.quantity,
+      });
+    }
+
+    const payload = {
+      requestId,
+      items: enrichedItems,
+      patientNote: patientNote || null,
+      prescriptionId: prescriptionId || null,
+      patientName: user.name || "Patient",
+      patientEmail: user.email,
+    };
+
+    await audit(tx, {
+      actorUserId: user.id,
+      pharmacyId,
+      entityId: requestId,
+      action: "DISPENSING_REQUEST_CREATED",
+      fromStatus: null,
+      toStatus: "AWAITING_STORE_CONFIRMATION",
+      reason: JSON.stringify(payload),
+    });
+  }, transactionOptions);
+
+  revalidatePath("/pharmacy");
+  revalidatePath("/pharmacy/workspace");
+  return { success: true, requestId };
+}
+
+export async function getPharmacyDispensingRequests(pharmacyId) {
+  const user = await currentUser();
+  if (typeof pharmacyId !== "string" || !pharmacyId) throw new Error("Pharmacy is required");
+
+  await membershipFor(db, user.id, pharmacyId);
+
+  const events = await db.pharmacyAuditEvent.findMany({
+    where: {
+      pharmacyId,
+      action: { in: ["DISPENSING_REQUEST_CREATED", "DISPENSING_REQUEST_STATUS_UPDATED"] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const requestsMap = new Map();
+  for (const ev of events) {
+    let details = {};
+    try {
+      details = JSON.parse(ev.reason || "{}");
+    } catch {}
+
+    if (ev.action === "DISPENSING_REQUEST_CREATED") {
+      requestsMap.set(ev.entityId, {
+        id: ev.entityId,
+        pharmacyId: ev.pharmacyId,
+        patientId: ev.actorUserId,
+        patientName: details.patientName || "Patient",
+        patientEmail: details.patientEmail,
+        items: details.items || [],
+        patientNote: details.patientNote || null,
+        prescriptionId: details.prescriptionId || null,
+        status: ev.toStatus || "AWAITING_STORE_CONFIRMATION",
+        createdAt: ev.createdAt,
+        updatedAt: ev.createdAt,
+        history: [{
+          action: ev.action,
+          status: ev.toStatus,
+          actorName: details.patientName || "Patient",
+          createdAt: ev.createdAt,
+          note: null,
+        }],
+      });
+    } else if (requestsMap.has(ev.entityId)) {
+      const existing = requestsMap.get(ev.entityId);
+      existing.status = ev.toStatus || existing.status;
+      existing.updatedAt = ev.createdAt;
+      existing.history.push({
+        action: ev.action,
+        status: ev.toStatus,
+        actorName: details.updatedBy || "Staff",
+        createdAt: ev.createdAt,
+        note: details.note || null,
+      });
+    }
+  }
+
+  const requests = Array.from(requestsMap.values()).sort(
+    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+  );
+
+  return { requests };
+}
+
+export async function updatePharmacyDispensingRequestStatus(formData) {
+  const user = await currentUser();
+  const pharmacyId = field(formData, "pharmacyId", "Pharmacy", 100);
+  const requestId = field(formData, "requestId", "Request ID", 100);
+  const status = field(formData, "status", "Status", 50);
+  const note = field(formData, "note", "Note", 500, false);
+
+  const allowedStatuses = ["CONFIRMED", "READY_FOR_PICKUP", "COMPLETED", "REJECTED"];
+  if (!allowedStatuses.includes(status)) {
+    throw new Error("Invalid request status transition");
+  }
+
+  await db.$transaction(async (tx) => {
+    await verifiedMembershipFor(tx, user.id, pharmacyId, ["OWNER", "MANAGER", "STAFF"]);
+
+    const latestEvent = await tx.pharmacyAuditEvent.findFirst({
+      where: {
+        pharmacyId,
+        entityId: requestId,
+        action: { in: ["DISPENSING_REQUEST_CREATED", "DISPENSING_REQUEST_STATUS_UPDATED"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!latestEvent) {
+      throw new Error("Dispensing request not found");
+    }
+
+    const currentStatus = latestEvent.toStatus;
+    if (currentStatus === "COMPLETED" || currentStatus === "REJECTED" || currentStatus === "CANCELLED") {
+      throw new Error(`Cannot update a request that is already ${currentStatus.toLowerCase()}`);
+    }
+
+    const payload = {
+      note: note || null,
+      updatedBy: user.name || "Pharmacy Staff",
+    };
+
+    await audit(tx, {
+      actorUserId: user.id,
+      pharmacyId,
+      entityId: requestId,
+      action: "DISPENSING_REQUEST_STATUS_UPDATED",
+      fromStatus: currentStatus,
+      toStatus: status,
+      reason: JSON.stringify(payload),
+    });
+  }, transactionOptions);
+
+  revalidatePath("/pharmacy/workspace");
+  revalidatePath("/pharmacy");
+  return { success: true };
+}
+
+export async function getPatientDispensingRequests() {
+  const user = await currentUser();
+
+  const events = await db.pharmacyAuditEvent.findMany({
+    where: {
+      action: { in: ["DISPENSING_REQUEST_CREATED", "DISPENSING_REQUEST_STATUS_UPDATED"] },
+    },
+    orderBy: { createdAt: "asc" },
+    include: {
+      pharmacy: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          city: true,
+          contactPhone: true,
+        },
+      },
+    },
+  });
+
+  const requestsMap = new Map();
+  for (const ev of events) {
+    if (ev.action === "DISPENSING_REQUEST_CREATED") {
+      if (ev.actorUserId === user.id) {
+        let details = {};
+        try { details = JSON.parse(ev.reason || "{}"); } catch {}
+        requestsMap.set(ev.entityId, {
+          id: ev.entityId,
+          pharmacyId: ev.pharmacyId,
+          pharmacy: ev.pharmacy,
+          items: details.items || [],
+          patientNote: details.patientNote || null,
+          prescriptionId: details.prescriptionId || null,
+          status: ev.toStatus || "AWAITING_STORE_CONFIRMATION",
+          createdAt: ev.createdAt,
+          updatedAt: ev.createdAt,
+          latestNote: null,
+        });
+      }
+    } else if (requestsMap.has(ev.entityId)) {
+      const existing = requestsMap.get(ev.entityId);
+      existing.status = ev.toStatus || existing.status;
+      existing.updatedAt = ev.createdAt;
+      let details = {};
+      try { details = JSON.parse(ev.reason || "{}"); } catch {}
+      if (details.note) existing.latestNote = details.note;
+    }
+  }
+
+  const requests = Array.from(requestsMap.values()).sort(
+    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+  );
+
+  return { requests };
+}
+
+export async function cancelPatientDispensingRequest(formData) {
+  const user = await currentUser();
+  const requestId = typeof formData === "string" ? formData : field(formData, "requestId", "Request ID", 100);
+
+  await db.$transaction(async (tx) => {
+    const createdEvent = await tx.pharmacyAuditEvent.findFirst({
+      where: {
+        entityId: requestId,
+        action: "DISPENSING_REQUEST_CREATED",
+        actorUserId: user.id,
+      },
+    });
+    if (!createdEvent) throw new Error("Request not found or unauthorized");
+
+    const latestEvent = await tx.pharmacyAuditEvent.findFirst({
+      where: {
+        entityId: requestId,
+        action: { in: ["DISPENSING_REQUEST_CREATED", "DISPENSING_REQUEST_STATUS_UPDATED"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!latestEvent || latestEvent.toStatus !== "AWAITING_STORE_CONFIRMATION") {
+      throw new Error("Only pending requests can be cancelled");
+    }
+
+    await audit(tx, {
+      actorUserId: user.id,
+      pharmacyId: createdEvent.pharmacyId,
+      entityId: requestId,
+      action: "DISPENSING_REQUEST_STATUS_UPDATED",
+      fromStatus: latestEvent.toStatus,
+      toStatus: "CANCELLED",
+      reason: JSON.stringify({ note: "Cancelled by patient", updatedBy: user.name || "Patient" }),
+    });
+  }, transactionOptions);
+
+  revalidatePath("/pharmacy");
   revalidatePath("/pharmacy/workspace");
   return { success: true };
 }

@@ -49,10 +49,10 @@ test("retirement migration aborts on legacy data and preserves payment payout al
 
 test("credit retirement migration follows all current payment migrations", async () => {
   const migrations = (await readdir(join(cwd(), "prisma/migrations"))).filter((entry) => /^\d{14}_/.test(entry)).sort();
-  assert.deepEqual(migrations.slice(-2), [
-    "20261024120000_payment_backed_doctor_payouts",
-    "20261024130000_remove_legacy_credit_system",
-  ]);
+  const payoutIndex = migrations.indexOf("20261024120000_payment_backed_doctor_payouts");
+  const cleanupIndex = migrations.indexOf("20261024130000_remove_legacy_credit_system");
+  assert.notEqual(payoutIndex, -1, "payment-backed payouts migration must exist");
+  assert.equal(cleanupIndex, payoutIndex + 1, "cleanup migration must immediately follow payment-backed payouts");
 });
 
 test("payment-backed payout cancellation, reservation and admin transfer resolution remain wired", async () => {

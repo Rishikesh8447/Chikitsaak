@@ -50,73 +50,75 @@
 
 :root {
   color-scheme: light;
-  --background: #f5f8f7;
-  --foreground: #172b34;
-  --card: #ffffff;
-  --card-foreground: #172b34;
-  --popover: #ffffff;
-  --popover-foreground: #172b34;
-  --primary: #176b63;
-  --primary-foreground: #ffffff;
-  --secondary: #e9f1ef;
-  --secondary-foreground: #20423f;
-  --muted: #edf2f1;
-  --muted-foreground: #5c7074;
-  --accent: #e5f2ef;
-  --accent-foreground: #174f49;
-  --destructive: #b42332;
-  --border: #dbe5e2;
-  --input: #d3dfdc;
-  --ring: #36877c;
+  --background: #F8F7F3;
+  --foreground: #24332F;
+  --card: #FFFFFF;
+  --card-foreground: #24332F;
+  --popover: #FFFFFF;
+  --popover-foreground: #24332F;
+  --primary: #27665B;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #1F5149;
+  --secondary: #E8F0EA;
+  --secondary-foreground: #24332F;
+  --muted: #E8F0EA;
+  --muted-foreground: #6C7772;
+  --accent: #E8F0EA;
+  --accent-foreground: #27665B;
+  --destructive: #B42332;
+  --border: #E5E7E0;
+  --input: #E5E7E0;
+  --ring: #27665B;
   --chart-1: oklch(0.60 0.16 160);
   --chart-2: oklch(0.55 0.14 200);
   --chart-3: oklch(0.65 0.18 45);
   --chart-4: oklch(0.60 0.18 280);
   --chart-5: oklch(0.55 0.20 340);
   --radius: 0.75rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #172b34;
-  --sidebar-primary: #176b63;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e5f2ef;
-  --sidebar-accent-foreground: #174f49;
-  --sidebar-border: #dbe5e2;
-  --sidebar-ring: #36877c;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #24332F;
+  --sidebar-primary: #27665B;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E8F0EA;
+  --sidebar-accent-foreground: #27665B;
+  --sidebar-border: #E5E7E0;
+  --sidebar-ring: #27665B;
 }
 
 .dark {
   color-scheme: dark;
-  --background: #101d24;
-  --foreground: #edf5f3;
-  --card: #17272e;
-  --card-foreground: #edf5f3;
-  --popover: #17272e;
-  --popover-foreground: #edf5f3;
-  --primary: #55b7a8;
-  --primary-foreground: #102b2a;
-  --secondary: #23383e;
-  --secondary-foreground: #e6f2ef;
-  --muted: #1d3037;
-  --muted-foreground: #a2b5b7;
-  --accent: #203a3b;
-  --accent-foreground: #d9f3ed;
-  --destructive: #f47780;
-  --border: #30444a;
-  --input: #3a5055;
-  --ring: #6bc8b8;
+  --background: #151B19;
+  --foreground: #F0F2ED;
+  --card: #1D2622;
+  --card-foreground: #F0F2ED;
+  --popover: #1D2622;
+  --popover-foreground: #F0F2ED;
+  --primary: #79B6A2;
+  --primary-foreground: #151B19;
+  --primary-hover: #91C7B3;
+  --secondary: #26372F;
+  --secondary-foreground: #F0F2ED;
+  --muted: #26372F;
+  --muted-foreground: #A5B0A9;
+  --accent: #26372F;
+  --accent-foreground: #79B6A2;
+  --destructive: #F47780;
+  --border: #303B35;
+  --input: #303B35;
+  --ring: #79B6A2;
   --chart-1: oklch(0.65 0.16 160);
   --chart-2: oklch(0.60 0.14 200);
   --chart-3: oklch(0.70 0.18 45);
   --chart-4: oklch(0.65 0.18 280);
   --chart-5: oklch(0.60 0.20 340);
-  --sidebar: #17272e;
-  --sidebar-foreground: #edf5f3;
-  --sidebar-primary: #55b7a8;
-  --sidebar-primary-foreground: #102b2a;
-  --sidebar-accent: #203a3b;
-  --sidebar-accent-foreground: #d9f3ed;
-  --sidebar-border: #30444a;
-  --sidebar-ring: #6bc8b8;
+  --sidebar: #1D2622;
+  --sidebar-foreground: #F0F2ED;
+  --sidebar-primary: #79B6A2;
+  --sidebar-primary-foreground: #151B19;
+  --sidebar-accent: #26372F;
+  --sidebar-accent-foreground: #79B6A2;
+  --sidebar-border: #303B35;
+  --sidebar-ring: #79B6A2;
 }
 
 @layer base {
@@ -160,6 +162,30 @@ select option { color: var(--foreground); background: var(--card); }
   background: color-mix(in srgb, var(--card) 74%, var(--background));
 }
 
+.pb-safe {
+  padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem));
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.card-vessel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-vessel:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+
+button.bg-primary:hover,
+a.bg-primary:hover {
+  background-color: var(--primary-hover) !important;
+}
 
 @utility gradient { @apply bg-primary; }
 @utility gradient-title { @apply font-bold text-primary pb-1 pr-2; }
