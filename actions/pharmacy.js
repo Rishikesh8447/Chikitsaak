@@ -613,9 +613,10 @@ export async function updatePharmacyDispensingRequestStatus(formData) {
 export async function getPatientDispensingRequests() {
   const user = await currentUser();
 
-  const events = await db.pharmacyAuditEvent.findMany({
+  const createdEvents = await db.pharmacyAuditEvent.findMany({
     where: {
-      action: { in: ["DISPENSING_REQUEST_CREATED", "DISPENSING_REQUEST_STATUS_UPDATED"] },
+      action: "DISPENSING_REQUEST_CREATED",
+      actorUserId: user.id,
     },
     orderBy: { createdAt: "asc" },
     include: {
@@ -631,27 +632,42 @@ export async function getPatientDispensingRequests() {
     },
   });
 
+  if (createdEvents.length === 0) {
+    return { requests: [] };
+  }
+
   const requestsMap = new Map();
-  for (const ev of events) {
-    if (ev.action === "DISPENSING_REQUEST_CREATED") {
-      if (ev.actorUserId === user.id) {
-        let details = {};
-        try { details = JSON.parse(ev.reason || "{}"); } catch {}
-        requestsMap.set(ev.entityId, {
-          id: ev.entityId,
-          pharmacyId: ev.pharmacyId,
-          pharmacy: ev.pharmacy,
-          items: details.items || [],
-          patientNote: details.patientNote || null,
-          prescriptionId: details.prescriptionId || null,
-          status: ev.toStatus || "AWAITING_STORE_CONFIRMATION",
-          createdAt: ev.createdAt,
-          updatedAt: ev.createdAt,
-          latestNote: null,
-        });
-      }
-    } else if (requestsMap.has(ev.entityId)) {
-      const existing = requestsMap.get(ev.entityId);
+  const requestIds = [];
+
+  for (const ev of createdEvents) {
+    let details = {};
+    try { details = JSON.parse(ev.reason || "{}"); } catch {}
+    requestsMap.set(ev.entityId, {
+      id: ev.entityId,
+      pharmacyId: ev.pharmacyId,
+      pharmacy: ev.pharmacy,
+      items: details.items || [],
+      patientNote: details.patientNote || null,
+      prescriptionId: details.prescriptionId || null,
+      status: ev.toStatus || "AWAITING_STORE_CONFIRMATION",
+      createdAt: ev.createdAt,
+      updatedAt: ev.createdAt,
+      latestNote: null,
+    });
+    requestIds.push(ev.entityId);
+  }
+
+  const updateEvents = await db.pharmacyAuditEvent.findMany({
+    where: {
+      action: "DISPENSING_REQUEST_STATUS_UPDATED",
+      entityId: { in: requestIds },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  for (const ev of updateEvents) {
+    const existing = requestsMap.get(ev.entityId);
+    if (existing) {
       existing.status = ev.toStatus || existing.status;
       existing.updatedAt = ev.createdAt;
       let details = {};

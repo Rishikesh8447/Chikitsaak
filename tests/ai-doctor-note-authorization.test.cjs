@@ -6,7 +6,7 @@ const { cwd } = require("node:process");
 
 const sourcePromise = readFile(join(cwd(), "actions", "ai.js"), "utf8");
 
-async function loadAction({ authenticated = true, user, appointment }) {
+async function loadAction({ authenticated = true, user, appointment, checkAiRateLimit = () => true }) {
   const source = await sourcePromise;
   const state = { userQueries: [], appointmentQueries: [], aiCalls: 0 };
   const dependencies = {
@@ -17,6 +17,8 @@ async function loadAction({ authenticated = true, user, appointment }) {
     },
     z: { array: () => chain(), string: () => chain(), object: (value) => ({ shape: value }) },
     requestStructuredAi: async () => { state.aiCalls += 1; return { consultationSummary: "Draft" }; },
+    checkAiRateLimit,
+    RATE_LIMIT_MESSAGE: "Too many AI requests. Please wait a minute before trying again.",
   };
   function chain() {
     const result = {
@@ -31,6 +33,7 @@ async function loadAction({ authenticated = true, user, appointment }) {
     .replace('import { z } from "zod";', "const { z } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { requestStructuredAi } from "@/lib/ai";', "const { requestStructuredAi } = dependencies;")
+    .replace('import { checkAiRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/ai-rate-limit.mjs";', "const { checkAiRateLimit, RATE_LIMIT_MESSAGE } = dependencies;")
     .replace("export async function generatePatientAiSummary", "async function generatePatientAiSummary")
     .replace("export async function generateDoctorNoteDraft", "async function generateDoctorNoteDraft")
     .concat("\nreturn { generateDoctorNoteDraft };");
@@ -97,4 +100,26 @@ test("verified doctor cannot generate a draft for another doctor's appointment",
   assert.deepEqual(await generateDoctorNoteDraft(form()), { error: "Appointment not found or not authorized" });
   assert.deepEqual(state.appointmentQueries[0].where, { id: "appointment-1", doctorId: "doctor-1" });
   assert.equal(state.aiCalls, 0);
+});
+
+test("verified doctor note draft is blocked when rate limit is exceeded without calling OpenAI", async () => {
+  let rateLimitAllowed = true;
+  const { generateDoctorNoteDraft, state } = await loadAction({
+    user: { id: "doctor-1", role: "DOCTOR", verificationStatus: "VERIFIED" },
+    appointment: authorizedAppointment,
+    checkAiRateLimit: (type, id) => {
+      assert.equal(type, "DOCTOR_DRAFT");
+      assert.equal(id, "doctor-1");
+      return rateLimitAllowed;
+    },
+  });
+
+  const res1 = await generateDoctorNoteDraft(form());
+  assert.equal(res1.success, true);
+  assert.equal(state.aiCalls, 1);
+
+  rateLimitAllowed = false;
+  const res2 = await generateDoctorNoteDraft(form());
+  assert.deepEqual(res2, { error: "Too many AI requests. Please wait a minute before trying again." });
+  assert.equal(state.aiCalls, 1, "OpenAI must not be called when rate limit is exceeded");
 });

@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
 import { requestStructuredAi } from "@/lib/ai";
+import { checkAiRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/ai-rate-limit.mjs";
 
 const textArray = z.array(z.string().trim().min(1).max(500)).max(10).default([]);
 const patientSummarySchema = z.object({
@@ -46,15 +47,18 @@ const doctorSystem = `You assist a licensed doctor by drafting consultation docu
 
 function safeAiError(error) {
   const message = error instanceof Error ? error.message : "";
-  if (["Unauthorized", "Appointment is required", "Appointment not found or not authorized", "Description is invalid", "Consultation information is invalid"].includes(message)) return message;
+  if (["Unauthorized", "Appointment is required", "Appointment not found or not authorized", "Description is invalid", "Consultation information is invalid", RATE_LIMIT_MESSAGE].includes(message)) return message;
   if (message.includes("database cannot be reached")) return message;
   return "AI assistance is currently unavailable. Please try again later.";
 }
 
 export async function generatePatientAiSummary(formData) {
   try {
-    await currentUser("PATIENT");
+    const patient = await currentUser("PATIENT");
     const description = inputText(formData.get("description"), "Description");
+    if (!checkAiRateLimit("PATIENT_SUMMARY", patient.id)) {
+      return { error: RATE_LIMIT_MESSAGE };
+    }
     return { success: true, summary: await requestStructuredAi({ system: patientSystem, user: description, schema: patientSummarySchema }) };
   } catch (error) {
     return { error: safeAiError(error) };
@@ -69,6 +73,9 @@ export async function generateDoctorNoteDraft(formData) {
     const appointment = await db.appointment.findUnique({ where: { id: appointmentId, doctorId: doctor.id }, select: { patientDescription: true, aiSummary: true, notes: true } });
     if (!appointment) return { error: "Appointment not found or not authorized" };
     const consultationInformation = inputText(formData.get("consultationInformation"), "Consultation information");
+    if (!checkAiRateLimit("DOCTOR_DRAFT", doctor.id)) {
+      return { error: RATE_LIMIT_MESSAGE };
+    }
     return { success: true, draft: await requestStructuredAi({ system: doctorSystem, user: JSON.stringify({ consultationInformation, patientDescription: appointment.patientDescription, aiSummary: appointment.aiSummary }), schema: doctorDraftSchema }) };
   } catch (error) {
     return { error: safeAiError(error) };

@@ -64,7 +64,7 @@ async function loadActions({
       findFirst: async (query) => {
         const matches = state.events.filter((e) => {
           if (query?.where?.pharmacyId && e.pharmacyId !== query.where.pharmacyId) return false;
-          if (query?.where?.entityId && e.entityId !== query.where.entityId) return false;
+          if (query?.where?.entityId && typeof query.where.entityId === "string" && e.entityId !== query.where.entityId) return false;
           if (query?.where?.actorUserId && e.actorUserId !== query.where.actorUserId) return false;
           if (query?.where?.action?.in && !query.where.action.in.includes(e.action)) return false;
           if (query?.where?.action && typeof query.where.action === "string" && e.action !== query.where.action) return false;
@@ -78,7 +78,11 @@ async function loadActions({
       findMany: async (query) => {
         return state.events.filter((e) => {
           if (query?.where?.pharmacyId && e.pharmacyId !== query.where.pharmacyId) return false;
+          if (query?.where?.actorUserId && e.actorUserId !== query.where.actorUserId) return false;
+          if (query?.where?.entityId && typeof query.where.entityId === "string" && e.entityId !== query.where.entityId) return false;
+          if (query?.where?.entityId?.in && !query.where.entityId.in.includes(e.entityId)) return false;
           if (query?.where?.action?.in && !query.where.action.in.includes(e.action)) return false;
+          if (query?.where?.action && typeof query.where.action === "string" && e.action !== query.where.action) return false;
           return true;
         });
       },
@@ -352,4 +356,89 @@ test("8. Unauthorized users cannot edit another pharmacy's products or access it
     foreignUser.getPharmacyDispensingRequests("pharmacy-a"),
     /Active pharmacy membership required/
   );
+});
+
+test("9. getPatientDispensingRequests enforces patient isolation, supports requests without status updates, and reflects latest status history", async () => {
+  const prod = { id: "prod-iso-1", name: "Ibuprofen 400mg", price: 50.0, pharmacyId: "pharmacy-a", isAvailable: true };
+
+  // Patient A submits a request (will remain in initial state, no updates)
+  const patientA = await loadActions({
+    userId: "patient-a",
+    userName: "Patient A",
+    products: [prod],
+  });
+  const { requestId: reqA } = await patientA.submitPharmacyDispensingRequest(form({
+    pharmacyId: "pharmacy-a",
+    items: JSON.stringify([{ productId: "prod-iso-1", quantity: 1 }]),
+    patientNote: "Need urgently",
+  }));
+
+  // Patient B submits a request (will receive multiple status updates from staff)
+  const patientB = await loadActions({
+    userId: "patient-b",
+    userName: "Patient B",
+    products: [prod],
+    auditEvents: patientA.state.events,
+  });
+  const { requestId: reqB } = await patientB.submitPharmacyDispensingRequest(form({
+    pharmacyId: "pharmacy-a",
+    items: JSON.stringify([{ productId: "prod-iso-1", quantity: 3 }]),
+    patientNote: "Leave at reception",
+  }));
+
+  // Staff updates Patient B's request: CONFIRMED -> READY_FOR_PICKUP
+  const staff = await loadActions({
+    userId: "user-mgr",
+    membership: verifiedManager,
+    auditEvents: patientB.state.events,
+  });
+  await staff.updatePharmacyDispensingRequestStatus(form({
+    pharmacyId: "pharmacy-a",
+    requestId: reqB,
+    status: "CONFIRMED",
+    note: "Order confirmed by pharmacist",
+  }));
+  await staff.updatePharmacyDispensingRequestStatus(form({
+    pharmacyId: "pharmacy-a",
+    requestId: reqB,
+    status: "READY_FOR_PICKUP",
+    note: "Package ready at counter 1",
+  }));
+
+  // Verify Patient A view:
+  // - Sees ONLY Request A (patient isolation: Request B and its staff updates are excluded)
+  // - Request A has no status updates: status is AWAITING_STORE_CONFIRMATION and latestNote is null
+  const patientAView = await loadActions({
+    userId: "patient-a",
+    auditEvents: staff.state.events,
+  });
+  const { requests: requestsA } = await patientAView.getPatientDispensingRequests();
+  assert.equal(requestsA.length, 1);
+  assert.equal(requestsA[0].id, reqA);
+  assert.equal(requestsA[0].status, "AWAITING_STORE_CONFIRMATION");
+  assert.equal(requestsA[0].latestNote, null);
+  assert.equal(requestsA[0].patientNote, "Need urgently");
+  assert.equal(requestsA[0].items[0].quantity, 1);
+
+  // Verify Patient B view:
+  // - Sees ONLY Request B (Request A is excluded)
+  // - Status history reflected: latest status is READY_FOR_PICKUP with latest note from staff
+  const patientBView = await loadActions({
+    userId: "patient-b",
+    auditEvents: staff.state.events,
+  });
+  const { requests: requestsB } = await patientBView.getPatientDispensingRequests();
+  assert.equal(requestsB.length, 1);
+  assert.equal(requestsB[0].id, reqB);
+  assert.equal(requestsB[0].status, "READY_FOR_PICKUP");
+  assert.equal(requestsB[0].latestNote, "Package ready at counter 1");
+  assert.equal(requestsB[0].items[0].quantity, 3);
+
+  // Calling user with no requests receives an empty list immediately
+  const emptyUser = await loadActions({
+    userId: "patient-empty",
+    auditEvents: staff.state.events,
+  });
+  const { requests: emptyRequests } = await emptyUser.getPatientDispensingRequests();
+  assert.deepEqual(emptyRequests, []);
 });

@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createPrescription } from "@/actions/medical";
 import useFetch from "@/hooks/use-fetch";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2, Pill, FlaskConical, Calendar, CheckCircle2, Upload, FileText, X } from "lucide-react";
+import { Plus, Trash2, Loader2, Pill, FlaskConical, Calendar, CheckCircle2, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const COMMON_LAB_TEST_SUGGESTIONS = [
@@ -31,41 +31,12 @@ export function PrescriptionForm({ appointmentId, existing }) {
   const [testsAdvised, setTestsAdvised] = useState("");
   const [followUpRequired, setFollowUpRequired] = useState(false);
   const [followUpDays, setFollowUpDays] = useState(14);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileError, setFileError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreated, setIsCreated] = useState(false);
 
   const router = useRouter();
   const { loading, fn, data, error: fetchError } = useFetch(createPrescription);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    setFileError("");
-    if (!file) {
-      setSelectedFile(null);
-      return;
-    }
-    const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
-    if (!allowedTypes.includes(file.type)) {
-      setFileError("Only PDF and image files (PNG, JPG, WebP) are supported.");
-      setSelectedFile(null);
-      e.target.value = "";
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setFileError("File size must not exceed 5MB.");
-      setSelectedFile(null);
-      e.target.value = "";
-      return;
-    }
-    setSelectedFile(file);
-  };
-
-  const removeFile = () => {
-    setSelectedFile(null);
-    setFileError("");
-  };
 
   const updateMedicine = (index, key, value) => {
     setMedicines((items) =>
@@ -145,11 +116,9 @@ export function PrescriptionForm({ appointmentId, existing }) {
     generalInstructions: [
       generalInstructionsText.trim() || null,
       testsAdvised.trim() ? `Recommended Laboratory Tests:\n${testsAdvised.trim()}` : null,
-      selectedFile ? `Attached document: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)` : null,
     ].filter(Boolean).join("\n\n") || null,
     followUpRequired,
     followUpDays: followUpRequired ? followUpDays : null,
-    attachedFileName: selectedFile?.name || null,
   } : null);
 
   // Read-only display when prescription is already recorded or created
@@ -203,13 +172,6 @@ export function PrescriptionForm({ appointmentId, existing }) {
           </div>
         )}
 
-        {activeRecord.attachedFileName && (
-          <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-background/50 p-3 text-xs">
-            <FileText className="size-4 text-primary shrink-0" />
-            <span className="font-semibold text-foreground">Attached Document:</span>
-            <span className="text-muted-foreground truncate">{activeRecord.attachedFileName}</span>
-          </div>
-        )}
 
         {activeRecord.followUpRequired && activeRecord.followUpDays && (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
@@ -396,55 +358,15 @@ export function PrescriptionForm({ appointmentId, existing }) {
         />
       </div>
 
-      {/* Optional Prescription Photo/PDF Upload */}
-      <div className="space-y-2 rounded-xl border border-border/80 p-3.5 bg-muted/10">
+      {/* Document Attachment Status Notice */}
+      <div className="space-y-1.5 rounded-xl border border-border/80 p-3.5 bg-muted/10">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <Upload className="size-3.5 text-primary" />
-          <span>Attach Existing Prescription or Clinical Document (Optional)</span>
+          <Info className="size-3.5 text-primary" />
+          <span>Prescription Document Attachments (Unavailable)</span>
         </div>
-        <p className="text-[11px] text-muted-foreground">
-          Attach a physical prescription photo or clinical report (PDF, PNG, JPG, WebP up to 5MB). File attachment is optional — digital medicines and diagnosis above remain fully recorded.
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Prescription document attachments are temporarily unavailable because secure storage integration has not been implemented. Please record all clinical findings, prescribed medicines, and test recommendations in the structured fields above.
         </p>
-
-        {!selectedFile ? (
-          <label className="flex flex-col items-center justify-center p-4 border border-dashed border-border rounded-lg bg-background hover:bg-muted/40 cursor-pointer transition-colors">
-            <Upload className="size-5 text-muted-foreground mb-1" />
-            <span className="text-xs font-medium text-foreground">Choose photo or PDF</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">PDF, PNG, JPEG, WebP · Max 5MB</span>
-            <input
-              type="file"
-              accept=".pdf,image/png,image/jpeg,image/webp"
-              onChange={handleFileChange}
-              disabled={isPending}
-              className="hidden"
-            />
-          </label>
-        ) : (
-          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-primary/30 bg-primary/5 text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText className="size-4 text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground truncate">{selectedFile.name}</p>
-                <p className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={removeFile}
-              disabled={isPending}
-              className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-              aria-label="Remove attached file"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        )}
-
-        {fileError && (
-          <p role="alert" className="text-xs text-destructive font-medium">
-            {fileError}
-          </p>
-        )}
       </div>
 
       {/* Follow-up Recommendation Section */}
