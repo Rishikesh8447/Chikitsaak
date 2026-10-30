@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { getSafeAvatarUrl } from "@/lib/avatar-image.mjs";
 import { useRouter } from "next/navigation";
 import {
   User,
@@ -30,6 +31,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function DoctorProfile({ doctor, availableDays, reviews }) {
   const doctorName = typeof doctor.name === "string" && doctor.name.trim() && !/^(null|undefined)(\s+(null|undefined))?$/i.test(doctor.name.trim()) ? doctor.name.trim() : "Doctor";
+  const avatarUrl = getSafeAvatarUrl(doctor.imageUrl);
   const [showBooking, setShowBooking] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const router = useRouter();
@@ -69,9 +71,9 @@ export function DoctorProfile({ doctor, availableDays, reviews }) {
             <CardContent className="p-5 sm:p-6">
               <div className="flex flex-col items-center text-center">
                 <div className="relative mb-4 size-24 overflow-hidden rounded-xl bg-primary/10 sm:size-28">
-                  {doctor.imageUrl ? (
+                  {avatarUrl ? (
                     <Image
-                      src={doctor.imageUrl}
+                      src={avatarUrl}
                       alt={doctorName}
                       fill
                       sizes="(min-width: 640px) 112px, 96px"

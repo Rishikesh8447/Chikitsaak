@@ -32,4 +32,8 @@ jobs:
         run: npm run lint
 
       - name: Build
+        env:
+          DATABASE_URL: "postgresql://mock:mock@localhost:5432/mock?sslmode=require"
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_bW9jay1jbGVyay1rZXktZm9yLWJ1aWxkLXRlc3RpbmctcHVycG9zZXMk"
+          CLERK_SECRET_KEY: "sk_test_mock_secret_key_for_build"
         run: npm run build

@@ -4,19 +4,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
+import { getSafeAvatarUrl } from "@/lib/avatar-image.mjs";
 
 export function DoctorCard({ doctor }) {
   const name = typeof doctor.name === "string" && doctor.name.trim() && !/^(null|undefined)(\s+(null|undefined))?$/i.test(doctor.name.trim()) ? doctor.name.trim() : "Doctor";
   const specialty = typeof doctor.specialty === "string" && doctor.specialty.trim() ? doctor.specialty.trim() : "general";
   const specialtyLabel = specialty === "general" ? "Healthcare specialist" : specialty;
   const location = [doctor.city, doctor.state, doctor.country].filter((value) => typeof value === "string" && value.trim()).join(", ");
+  const avatarUrl = getSafeAvatarUrl(doctor.imageUrl);
 
   return (
     <Card className="h-full min-w-0 py-0 transition-colors hover:border-primary/40">
       <CardContent className="flex h-full min-w-0 flex-col p-5 sm:p-6">
         <div className="flex min-w-0 items-start gap-4">
           <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10">
-            {doctor.imageUrl ? <Image src={doctor.imageUrl} alt={name} width={56} height={56} className="size-14 object-cover" /> : <User className="size-6 text-primary" />}
+            {avatarUrl ? <Image src={avatarUrl} alt={name} width={56} height={56} className="size-14 object-cover" /> : <User className="size-6 text-primary" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
