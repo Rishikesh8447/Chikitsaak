@@ -147,7 +147,20 @@ npm run build
 npm start
 ```
 
-Configure a scheduler to call `/api/cron/reminders` with `Authorization: Bearer <CRON_SECRET>` at the desired interval. The endpoint is not intended for browser polling.
+### Appointment reminders scheduler
+
+Appointment reminders are evaluated across two discrete time windows:
+1. `TWENTY_FOUR_HOURS`: 23 to 24 hours prior to appointment start.
+2. `THIRTY_MINUTES`: 30 minutes or less prior to appointment start.
+
+Because Vercel Hobby accounts restrict Vercel Cron to once daily, automated scheduling is configured via GitHub Actions in `.github/workflows/reminders-cron.yml` running every 15 minutes (`*/15 * * * *`).
+
+**Setup and operational requirements:**
+1. **GitHub Secret**: Add `CRON_SECRET` to repository secrets (**Settings** &rarr; **Secrets and variables** &rarr; **Actions** &rarr; **Repository secrets**), matching the value configured in the Vercel project environment.
+2. **Security**: The workflow authenticates via `Authorization: Bearer ${{ secrets.CRON_SECRET }}` and reports only the HTTP response status code, never printing headers or secret tokens.
+3. **Concurrency**: Overlapping runs are prevented by the `appointment-reminders` concurrency group.
+4. **Deduplication Safeguard**: In `lib/reminders.js`, reminder claims use transactional unique constraints on `[appointmentId, type]`, preventing duplicate notifications even if concurrent external calls occur.
+5. **External Scheduler Check**: If any third-party external scheduler (e.g. cron-job.org, AWS EventBridge) was previously configured out-of-band, disable it before relying on the GitHub Actions workflow to prevent redundant traffic.
 
 ## Verification
 

@@ -1,0 +1,42 @@
+name: Appointment Reminders Scheduler
+
+on:
+  schedule:
+    # Run every 15 minutes to evaluate the 23-24 hour and 30-minute reminder windows
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: appointment-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  process-reminders:
+    name: Process Due Reminders
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger appointment reminders endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "Error: CRON_SECRET is not configured in repository secrets."
+            exit 1
+          fi
+
+          HTTP_STATUS=$(curl -s -o response.txt -w "%{http_code}" \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "https://chikitsaak.vercel.app/api/cron/reminders")
+
+          if [ "${HTTP_STATUS}" -ne 200 ]; then
+            echo "Reminder processing failed with HTTP status: ${HTTP_STATUS}"
+            exit 1
+          fi
+
+          echo "Reminder processing completed successfully with HTTP status: ${HTTP_STATUS}"
+
