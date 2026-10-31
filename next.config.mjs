@@ -6,7 +6,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://img.clerk.com https://images.clerk.dev https://*.googleusercontent.com https://avatars.githubusercontent.com https://*.razorpay.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://api.razorpay.com https://lumberjack.razorpay.com https://*.opentok.com https://*.tokbox.com wss://*.tokbox.com",
+  "connect-src 'self' https://*.clerk.accounts.dev https://*.accounts.dev https://*.clerk.com https://api.razorpay.com https://lumberjack.razorpay.com https://*.opentok.com https://*.tokbox.com wss://*.tokbox.com",
   "media-src 'self' blob: mediastream:",
   "frame-src 'self' https://api.razorpay.com https://*.clerk.accounts.dev https://*.clerk.com",
   "worker-src 'self' blob:",

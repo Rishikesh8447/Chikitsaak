@@ -96,7 +96,8 @@ test("Content-Security-Policy contains required directives and valid origins for
   const connectSrc = directives.get("connect-src");
   assert.ok(connectSrc, "connect-src directive must be present");
   assert.ok(connectSrc.includes("'self'"));
-  assert.ok(connectSrc.includes("https://*.clerk.accounts.dev"));
+  assert.ok(connectSrc.includes("https://*.clerk.accounts.dev"), "connect-src must include Clerk FAPI domain");
+  assert.ok(connectSrc.includes("https://*.accounts.dev"), "connect-src must include Clerk development accounts portal domain");
   assert.ok(connectSrc.includes("https://*.clerk.com"));
   assert.ok(connectSrc.includes("https://api.razorpay.com"));
   assert.ok(connectSrc.includes("https://lumberjack.razorpay.com"));
@@ -165,4 +166,37 @@ test("next.config.mjs static content preserves CSP without syntax errors", () =>
   assert.doesNotMatch(content, /'unsafe-eval'/);
   assert.doesNotMatch(content, /api\.openai\.com/);
 });
+
+test("Content-Security-Policy connect-src authorizes development Clerk sign-in instance hostname while rejecting unrelated domains", async () => {
+  const configModule = await import("../next.config.mjs");
+  const nextConfig = configModule.default;
+  const headerConfigs = await nextConfig.headers();
+  const rootHeaderConfig = headerConfigs.find((h) => h.source === "/(.*)");
+  const cspValue = rootHeaderConfig.headers.find((h) => h.key === "Content-Security-Policy")?.value;
+  const directives = parseCspDirectives(cspValue);
+  const connectSrc = directives.get("connect-src") || [];
+
+  // Helper matching standard CSP host matching algorithm (RFC 7932 / CSP spec)
+  function isOriginAllowedInConnectSrc(urlStr) {
+    const parsed = new URL(urlStr);
+    return connectSrc.some((entry) => {
+      if (entry === "'self'") return false; // assuming external origin
+      if (entry.startsWith("https://*.")) {
+        const baseDomain = entry.substring("https://*.".length);
+        return parsed.protocol === "https:" && parsed.hostname.endsWith("." + baseDomain) && parsed.hostname !== baseDomain;
+      }
+      return entry === `${parsed.protocol}//${parsed.hostname}`;
+    });
+  }
+
+  // Must allow the observed development instance prefetch / redirect host
+  assert.equal(isOriginAllowedInConnectSrc("https://enjoyed-panther-39.accounts.dev/sign-in"), true, "Must authorize enjoyed-panther-39.accounts.dev");
+  assert.equal(isOriginAllowedInConnectSrc("https://enjoyed-panther-39.clerk.accounts.dev/v1/client"), true, "Must authorize enjoyed-panther-39.clerk.accounts.dev");
+
+  // Must NOT allow arbitrary or unapproved domains
+  assert.equal(isOriginAllowedInConnectSrc("https://attacker.com/evil"), false, "Must not authorize attacker.com");
+  assert.equal(isOriginAllowedInConnectSrc("https://accounts.dev/sign-in"), false, "Must not authorize root accounts.dev without subdomain");
+  assert.equal(isOriginAllowedInConnectSrc("http://enjoyed-panther-39.accounts.dev"), false, "Must not authorize insecure http: scheme");
+});
+
 
