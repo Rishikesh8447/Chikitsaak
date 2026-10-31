@@ -16,8 +16,14 @@ const NAV_ITEMS = [
 export function BottomNavigation() {
   const pathname = usePathname();
 
-  // Hide on auth routes or in video consultations
-  if (pathname?.startsWith("/sign-in") || pathname?.startsWith("/sign-up") || pathname?.startsWith("/video-call")) {
+  // Hide on auth routes, in video consultations, or on admin routes
+  if (
+    pathname?.startsWith("/sign-in") ||
+    pathname?.startsWith("/sign-up") ||
+    pathname?.startsWith("/video-call") ||
+    pathname === "/admin" ||
+    pathname?.startsWith("/admin/")
+  ) {
     return null;
   }
 
