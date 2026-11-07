@@ -54,6 +54,7 @@ import {
   isOriginalAppointmentEligibleForFollowUp,
   getDoctorSupportedModes,
 } from "@/lib/follow-up-appointment.mjs";
+import { useLanguage } from "@/components/language-provider";
 
 export function AppointmentCard({
   appointment,
@@ -61,6 +62,8 @@ export function AppointmentCard({
   refetchAppointments,
   initialOpen = false,
 }) {
+  const { t, locale, isStaff } = useLanguage();
+  const isPatient = userRole === "PATIENT" && !isStaff;
   const [open, setOpen] = useState(Boolean(initialOpen));
   const [action, setAction] = useState(null); // 'cancel', 'notes', 'video', or 'complete'
   const [notes, setNotes] = useState(appointment.notes || "");
@@ -447,7 +450,7 @@ export function AppointmentCard({
   const otherParty =
     userRole === "DOCTOR" ? appointment.patient : appointment.doctor;
 
-  const otherPartyLabel = userRole === "DOCTOR" ? "Patient" : "Doctor";
+  const otherPartyLabel = userRole === "DOCTOR" ? "Patient" : isPatient ? t("appointmentCard.doctorLabel", "Doctor") : "Doctor";
   const otherPartyIcon = userRole === "DOCTOR" ? <User /> : <Stethoscope />;
 
   const isFollowUpAppointment = Boolean(appointment.originalAppointmentId);
@@ -458,6 +461,16 @@ export function AppointmentCard({
   const recommendedFollowUpDate = appointment.prescription?.followUpDays
     ? calculateRecommendedFollowUpDate(appointment.startTime, appointment.prescription.followUpDays)
     : null;
+
+  const displayStatus = isPatient
+    ? (appointment.status === "SCHEDULED" ? t("hub.statuses.scheduled", "Scheduled")
+      : appointment.status === "CONFIRMED" ? t("hub.statuses.confirmed", "Confirmed")
+      : appointment.status === "IN_PROGRESS" ? t("hub.statuses.in_progress", "In progress")
+      : appointment.status === "COMPLETED" ? t("hub.statuses.completed", "Completed")
+      : appointment.status === "CANCELLED" ? t("hub.statuses.cancelled", "Cancelled")
+      : appointment.status === "PAYMENT_PENDING" ? t("appointmentCard.paymentPending", "Payment Pending")
+      : appointment.status)
+    : appointment.status;
 
   return (
     <>
@@ -477,7 +490,7 @@ export function AppointmentCard({
                 <h3 className="font-semibold text-foreground text-base">
                   {userRole === "DOCTOR"
                     ? otherParty.name
-                    : `Dr. ${otherParty.name}`}
+                    : `${isPatient && locale === "hi" ? "डॉ." : "Dr."} ${otherParty.name}`}
                 </h3>
                 {userRole === "DOCTOR" && (
                   <p className="text-xs text-muted-foreground">
@@ -486,7 +499,7 @@ export function AppointmentCard({
                 )}
                 {userRole === "PATIENT" && (
                   <p className="text-xs text-muted-foreground">
-                    {otherParty.specialty}
+                    {t(`hub.specialties.${otherParty.specialty}`, otherParty.specialty)}
                   </p>
                 )}
                 <div className="flex items-center mt-2 text-xs text-muted-foreground">
@@ -504,8 +517,8 @@ export function AppointmentCard({
                   <div className="flex items-center mt-2 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
                     <Calendar className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-primary shrink-0" />
                     <span>
-                      Recommended follow-up: within {appointment.prescription.followUpDays} days
-                      {recommendedFollowUpDate ? ` (around ${format(recommendedFollowUpDate, "MMM d, yyyy")})` : ""}
+                      {t("appointmentCard.recommendedFollowUp", "Recommended follow-up: within {days} days").replace("{days}", String(appointment.prescription.followUpDays))}
+                      {recommendedFollowUpDate ? ` (${locale === "hi" ? "लगभग" : "around"} ${format(recommendedFollowUpDate, "MMM d, yyyy")})` : ""}
                     </span>
                   </div>
                 )}
@@ -518,7 +531,7 @@ export function AppointmentCard({
                     variant="outline"
                     className="bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-medium"
                   >
-                    Follow-up (Included / ₹0)
+                    {isPatient ? t("appointmentCard.followUpIncluded", "Follow-up (Included / ₹0)") : "Follow-up (Included / ₹0)"}
                   </Badge>
                 )}
                 <Badge
@@ -533,12 +546,12 @@ export function AppointmentCard({
                       : "bg-muted border-border text-muted-foreground"
                   }
                 >
-                  {appointment.status}
+                  {displayStatus}
                 </Badge>
               </div>
               {isFollowUpAppointment ? (
                 <div className="text-right text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                  Follow-up (Included / ₹0)
+                  {isPatient ? t("appointmentCard.followUpIncluded", "Follow-up (Included / ₹0)") : "Follow-up (Included / ₹0)"}
                 </div>
               ) : appointment.payment ? (
                 <div className="text-right text-xs text-muted-foreground">
@@ -555,12 +568,12 @@ export function AppointmentCard({
                     onClick={openFollowUp}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                   >
-                    Book Follow-up (Included / ₹0)
+                    {isPatient ? t("appointmentCard.bookFollowUpBtn", "Book Follow-up (Included / ₹0)") : "Book Follow-up (Included / ₹0)"}
                   </Button>
                 )}
                 {userRole === "PATIENT" && appointment.followUpAppointment && appointment.followUpAppointment.status !== "CANCELLED" && (
                   <Badge variant="outline" className="bg-muted border-border text-xs text-muted-foreground self-center">
-                    Follow-up: {appointment.followUpAppointment.status}
+                    {t("appointmentCard.followUpStatus", "Follow-up: {status}").replace("{status}", t(`hub.statuses.${appointment.followUpAppointment.status.toLowerCase()}`, appointment.followUpAppointment.status))}
                   </Badge>
                 )}
                 {userRole === "PATIENT" && !isFollowUpAppointment && appointment.status === "PAYMENT_PENDING"
@@ -568,7 +581,7 @@ export function AppointmentCard({
                   && ["ONLINE", "UPI_QR"].includes(appointment.payment.method)
                   && !resumeStatusMessage && (
                     <Button size="sm" variant="outline" onClick={handleResumeCheckout} disabled={resumeCheckoutLoading || !razorpayReady}>
-                      {resumeCheckoutLoading ? "Checking payment..." : razorpayReady ? "Resume checkout" : "Loading secure checkout..."}
+                      {resumeCheckoutLoading ? t("appointmentCard.checkingPayment", "Checking payment...") : razorpayReady ? t("appointmentCard.resumeCheckout", "Resume checkout") : t("appointmentCard.loadingCheckout", "Loading secure checkout...")}
                     </Button>
                   )}
                 {userRole === "DOCTOR"
@@ -613,7 +626,7 @@ export function AppointmentCard({
                   appointment.review ? (
                     <Badge variant="outline" className="bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs self-center flex items-center gap-1">
                       <Star className="size-3 fill-amber-400 text-amber-400" />
-                      {appointment.review.rating}/5 Reviewed
+                      {appointment.review.rating}/5 {isPatient ? t("appointmentCard.reviewed", "Reviewed") : "Reviewed"}
                     </Badge>
                   ) : (
                     <Button
@@ -623,7 +636,7 @@ export function AppointmentCard({
                       onClick={() => setOpen(true)}
                     >
                       <Star className="size-3.5 mr-1 fill-amber-400 text-amber-400" />
-                      Rate Doctor
+                      {isPatient ? t("appointmentCard.rateDoctor", "Rate Doctor") : "Rate Doctor"}
                     </Button>
                   )
                 )}
@@ -633,7 +646,7 @@ export function AppointmentCard({
                   className="border-border/80 hover:bg-muted text-foreground"
                   onClick={() => setOpen(true)}
                 >
-                  View Details
+                  {isPatient ? t("appointmentCard.viewDetails", "View Details") : "View Details"}
                 </Button>
               </div>
             </div>
@@ -646,12 +659,16 @@ export function AppointmentCard({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-foreground">
-              Appointment Details
+              {isPatient ? t("appointmentCard.detailsTitle", "Appointment Details") : "Appointment Details"}
             </DialogTitle>
             <DialogDescription>
-              {appointment.status === "SCHEDULED"
-                ? "Manage your upcoming appointment"
-                : "View appointment information"}
+              {isPatient
+                ? (appointment.status === "SCHEDULED"
+                    ? t("appointmentCard.manageUpcoming", "Manage your upcoming appointment")
+                    : t("appointmentCard.viewInfo", "View appointment information"))
+                : (appointment.status === "SCHEDULED"
+                    ? "Manage your upcoming appointment"
+                    : "View appointment information")}
             </DialogDescription>
           </DialogHeader>
 
@@ -669,7 +686,7 @@ export function AppointmentCard({
                   <p className="text-foreground font-semibold text-sm">
                     {userRole === "DOCTOR"
                       ? otherParty.name
-                      : `Dr. ${otherParty.name}`}
+                      : `${isPatient && locale === "hi" ? "डॉ." : "Dr."} ${otherParty.name}`}
                   </p>
                   {userRole === "DOCTOR" && (
                     <p className="text-muted-foreground text-xs">
@@ -678,7 +695,7 @@ export function AppointmentCard({
                   )}
                   {userRole === "PATIENT" && (
                     <p className="text-muted-foreground text-xs">
-                      {otherParty.specialty}
+                      {t(`hub.specialties.${otherParty.specialty}`, otherParty.specialty)}
                     </p>
                   )}
                 </div>
@@ -688,7 +705,7 @@ export function AppointmentCard({
             {/* Appointment Time */}
             <div className="space-y-2">
               <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Scheduled Time
+                {isPatient ? t("appointmentCard.scheduledTime", "Scheduled Time") : "Scheduled Time"}
               </h4>
               <div className="flex flex-col gap-1 text-sm">
                 <div className="flex items-center">
@@ -710,7 +727,7 @@ export function AppointmentCard({
             {/* Status */}
             <div className="space-y-2">
               <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Status
+                {isPatient ? t("appointmentCard.statusHeader", "Status") : "Status"}
               </h4>
               <div className="flex items-center gap-2 flex-wrap">
                 {isFollowUpAppointment && (
@@ -718,7 +735,7 @@ export function AppointmentCard({
                     variant="outline"
                     className="bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-medium"
                   >
-                    Follow-up (Included / ₹0)
+                    {isPatient ? t("appointmentCard.followUpIncluded", "Follow-up (Included / ₹0)") : "Follow-up (Included / ₹0)"}
                   </Badge>
                 )}
                 <Badge
@@ -731,7 +748,7 @@ export function AppointmentCard({
                       : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium"
                   }
                 >
-                  {appointment.status}
+                  {displayStatus}
                 </Badge>
               </div>
             </div>
@@ -742,7 +759,7 @@ export function AppointmentCard({
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   {userRole === "DOCTOR"
                     ? "Patient Description"
-                    : "Your Description"}
+                    : isPatient ? t("appointmentCard.yourDescription", "Your Description") : "Your Description"}
                 </h4>
                 <div className="p-3.5 rounded-xl bg-muted/30 border border-border/80">
                   <p className="text-foreground text-sm whitespace-pre-line leading-relaxed">
@@ -766,15 +783,19 @@ export function AppointmentCard({
               <Button variant="outline" onClick={() => handleStatusChange("NO_SHOW")} disabled={statusLoading} className="border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">Mark No-show</Button>
             )}
             {userRole === "PATIENT" && ["SCHEDULED", "CONFIRMED"].includes(appointment.status) && (
-              <Button variant="outline" onClick={openReschedule} disabled={slotsLoading} className="border-emerald-500/30 text-emerald-600 dark:text-primary hover:bg-emerald-500/10">Reschedule</Button>
+              <Button variant="outline" onClick={openReschedule} disabled={slotsLoading} className="border-emerald-500/30 text-emerald-600 dark:text-primary hover:bg-emerald-500/10">
+                {isPatient ? t("appointmentCard.rescheduleBtn", "Reschedule") : "Reschedule"}
+              </Button>
             )}
             {appointment.status === "SCHEDULED" && (
-              <p className="text-sm text-muted-foreground">Waiting for doctor confirmation.</p>
+              <p className="text-sm text-muted-foreground">
+                {isPatient ? t("appointmentCard.waitingConfirmation", "Waiting for doctor confirmation.") : "Waiting for doctor confirmation."}
+              </p>
             )}
             {appointment.consultationMode !== "OFFLINE" && ["CONFIRMED", "IN_PROGRESS"].includes(appointment.status) && (
               <div className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Video Consultation
+                  {isPatient ? t("appointmentCard.videoConsultation", "Video Consultation") : "Video Consultation"}
                 </h4>
                 <Button
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium shadow-xs"
@@ -786,14 +807,14 @@ export function AppointmentCard({
                   {tokenLoading || action === "video" ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Preparing Video Call...
+                      {isPatient ? t("appointmentCard.preparingVideo", "Preparing Video Call...") : "Preparing Video Call..."}
                     </>
                   ) : (
                     <>
                       <Video className="h-4 w-4 mr-2" />
                       {isAppointmentActive()
-                        ? "Join Video Call"
-                        : "Video call will be available 30 minutes before appointment"}
+                        ? (isPatient ? t("appointmentCard.joinVideo", "Join Video Call") : "Join Video Call")
+                        : (isPatient ? t("appointmentCard.videoAvailableLater", "Video call will be available 30 minutes before appointment") : "Video call will be available 30 minutes before appointment")}
                     </>
                   )}
                 </Button>
@@ -804,7 +825,7 @@ export function AppointmentCard({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Doctor Notes
+                  {isPatient ? t("appointmentCard.doctorNotes", "Doctor Notes") : "Doctor Notes"}
                 </h4>
                 {userRole === "DOCTOR" &&
                   action !== "notes" &&
@@ -868,7 +889,7 @@ export function AppointmentCard({
                     </p>
                   ) : (
                     <p className="text-muted-foreground italic text-xs">
-                      No notes added yet
+                      {isPatient ? t("appointmentCard.noNotesYet", "No notes added yet") : "No notes added yet"}
                     </p>
                   )}
                 </div>
@@ -878,7 +899,9 @@ export function AppointmentCard({
             {((userRole === "DOCTOR" && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(appointment.status)) ||
               (userRole === "PATIENT" && Boolean(appointment.prescription))) && (
               <div className="space-y-2 rounded-xl border border-border/80 p-3.5 bg-muted/20">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Digital Prescription</h4>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {isPatient ? t("appointmentCard.digitalPrescription", "Digital Prescription") : "Digital Prescription"}
+                </h4>
                 <PrescriptionForm appointmentId={appointment.id} existing={appointment.prescription} />
               </div>
             )}
@@ -887,10 +910,13 @@ export function AppointmentCard({
               <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5">
                 <h4 className="text-xs font-semibold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Calendar className="h-4 w-4" />
-                  Follow-up Recommendation
+                  {isPatient ? t("appointmentCard.followUpRecommendation", "Follow-up Recommendation").replace(": within {days} days", "") : "Follow-up Recommendation"}
                 </h4>
                 <p className="text-sm text-foreground">
-                  The doctor recommended a follow-up consultation within <span className="font-semibold">{appointment.prescription.followUpDays} days</span> (included at ₹0).
+                  {isPatient
+                    ? t("appointmentCard.recommendedFollowUp", "Recommended follow-up: within {days} days", { days: appointment.prescription.followUpDays })
+                    : `The doctor recommended a follow-up consultation within ${appointment.prescription.followUpDays} days`}{" "}
+                  ({isPatient ? t("appointmentCard.followUpIncluded", "Included / ₹0") : "included at ₹0"}).
                 </p>
                 {recommendedFollowUpDate && (
                   <p className="text-xs text-muted-foreground">
@@ -907,13 +933,15 @@ export function AppointmentCard({
                       }}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                     >
-                      Book Follow-up (Included / ₹0)
+                      {isPatient ? t("appointmentCard.bookFollowUpBtn", "Book Follow-up (Included / ₹0)") : "Book Follow-up (Included / ₹0)"}
                     </Button>
                   </div>
                 )}
                 {appointment.followUpAppointment && appointment.followUpAppointment.status !== "CANCELLED" && (
                   <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 pt-1">
-                    Follow-up consultation is {appointment.followUpAppointment.status.toLowerCase()}.
+                    {isPatient
+                      ? t("appointmentCard.followUpStatus", "Follow-up: {status}", { status: appointment.followUpAppointment.status.toLowerCase() })
+                      : `Follow-up consultation is ${appointment.followUpAppointment.status.toLowerCase()}.`}
                   </p>
                 )}
               </div>
@@ -921,7 +949,9 @@ export function AppointmentCard({
 
             {userRole === "PATIENT" && appointment.status === "COMPLETED" && (
               <div className="space-y-2 rounded-xl border border-border/80 p-3.5 bg-muted/20">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Rate this consultation</h4>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {isPatient ? t("appointmentCard.rateConsultation", "Rate this consultation") : "Rate this consultation"}
+                </h4>
                 <ReviewForm appointmentId={appointment.id} existing={appointment.review} />
               </div>
             )}
@@ -961,12 +991,12 @@ export function AppointmentCard({
                   {cancelLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Cancelling...
+                      {isPatient ? t("appointmentCard.cancelling", "Cancelling...") : "Cancelling..."}
                     </>
                   ) : (
                     <>
                       <X className="h-4 w-4 mr-1" />
-                      Cancel Appointment
+                      {isPatient ? t("appointmentCard.cancelAppointment", "Cancel Appointment") : "Cancel Appointment"}
                     </>
                   )}
                 </Button>
@@ -977,7 +1007,7 @@ export function AppointmentCard({
               onClick={() => setOpen(false)}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              Close
+              {isPatient ? t("appointmentCard.close", "Close") : "Close"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -987,10 +1017,12 @@ export function AppointmentCard({
           <DialogHeader className="p-6 pb-4 border-b border-border/80 shrink-0">
             <DialogTitle className="text-foreground text-lg font-bold flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
-              Reschedule Consultation
+              {isPatient ? t("appointmentCard.rescheduleTitle", "Reschedule Consultation") : "Reschedule Consultation"}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-1">
-              Select an available 20-minute slot with Dr. {otherParty?.name || "your doctor"}. Your payment remains confirmed and will not change.
+              {isPatient
+                ? t("appointmentCard.rescheduleDesc", "Select an available 20-minute slot with Dr. {doctor}. Your payment remains confirmed and will not change.", { doctor: otherParty?.name || "your doctor" })
+                : `Select an available 20-minute slot with Dr. ${otherParty?.name || "your doctor"}. Your payment remains confirmed and will not change.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1002,14 +1034,16 @@ export function AppointmentCard({
                   <Clock className="size-4" />
                 </div>
                 <div>
-                  <p className="text-xs text-primary font-semibold uppercase tracking-wider">Selected Slot</p>
+                  <p className="text-xs text-primary font-semibold uppercase tracking-wider">
+                    {isPatient ? t("appointmentCard.selectedSlot", "Selected Slot") : "Selected Slot"}
+                  </p>
                   <p className="text-sm font-bold text-foreground">
                     {formatLocalSlotRange(selectedRescheduleSlot.startTime, selectedRescheduleSlot.endTime)}
                   </p>
                 </div>
               </div>
               <Badge variant="outline" className="bg-primary text-primary-foreground border-transparent text-xs font-medium">
-                Ready to confirm
+                {isPatient ? t("appointmentCard.readyToConfirm", "Ready to confirm") : "Ready to confirm"}
               </Badge>
             </div>
           )}
@@ -1019,14 +1053,18 @@ export function AppointmentCard({
             {slotsLoading ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
                 <Loader2 className="size-6 animate-spin text-primary" />
-                <p className="text-xs font-medium">Checking doctor availability...</p>
+                <p className="text-xs font-medium">
+                  {isPatient ? t("appointmentCard.checkingAvailability", "Checking doctor availability...") : "Checking doctor availability..."}
+                </p>
               </div>
             ) : slotsData?.days?.map((day) => (
               <div key={day.date} className="space-y-2.5">
                 <div className="flex items-center gap-2 pb-1 border-b border-border/50">
                   <Calendar className="size-3.5 text-primary" />
                   <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">{day.displayDate}</h4>
-                  <span className="text-[11px] text-muted-foreground">({day.slots.length} available)</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    ({day.slots.length} {isPatient ? t("appointmentCard.slotsAvailable", "available") : "available"})
+                  </span>
                 </div>
                 {day.slots.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1050,15 +1088,23 @@ export function AppointmentCard({
                     })}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic py-1">No remaining slots for this date.</p>
+                  <p className="text-xs text-muted-foreground italic py-1">
+                    {isPatient ? t("appointmentCard.noRemainingSlots", "No remaining slots for this date.") : "No remaining slots for this date."}
+                  </p>
                 )}
               </div>
             ))}
             {!slotsLoading && !slotsData?.days?.some((day) => day.slots.length) && (
               <div className="text-center py-10 rounded-xl border border-dashed border-border p-6">
                 <Calendar className="size-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-semibold text-foreground">No slots currently open</p>
-                <p className="text-xs text-muted-foreground mt-1">Dr. {otherParty?.name || "The doctor"} does not have open slots in this window. Check back soon.</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {isPatient ? t("appointmentCard.noSlotsOpen", "No slots currently open") : "No slots currently open"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isPatient
+                    ? t("appointmentCard.noSlotsWindow", "Dr. {doctor} does not have open slots in this window. Check back soon.", { doctor: otherParty?.name || "The doctor" })
+                    : `Dr. ${otherParty?.name || "The doctor"} does not have open slots in this window. Check back soon.`}
+                </p>
               </div>
             )}
           </div>
@@ -1067,14 +1113,14 @@ export function AppointmentCard({
           <DialogFooter className="p-4 sm:p-5 border-t border-border/80 bg-muted/20 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="text-xs text-muted-foreground w-full sm:w-auto text-center sm:text-left">
               {selectedRescheduleSlot ? (
-                <span>Confirmed appointment will move to the selected time.</span>
+                <span>{isPatient ? t("appointmentCard.rescheduleNotice", "Confirmed appointment will move to the selected time.") : "Confirmed appointment will move to the selected time."}</span>
               ) : (
-                <span>Choose a time slot to proceed.</span>
+                <span>{isPatient ? t("appointmentCard.chooseSlotNotice", "Choose a time slot to proceed.") : "Choose a time slot to proceed."}</span>
               )}
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button variant="outline" size="sm" onClick={() => setRescheduleOpen(false)} disabled={rescheduleLoading}>
-                Cancel
+                {isPatient ? t("appointmentCard.cancel", "Cancel") : "Cancel"}
               </Button>
               <Button
                 size="sm"
@@ -1085,10 +1131,10 @@ export function AppointmentCard({
                 {rescheduleLoading ? (
                   <>
                     <Loader2 className="mr-2 size-3.5 animate-spin" />
-                    Rescheduling...
+                    {isPatient ? t("appointmentCard.rescheduling", "Rescheduling...") : "Rescheduling..."}
                   </>
                 ) : (
-                  "Confirm Reschedule"
+                  isPatient ? t("appointmentCard.confirmReschedule", "Confirm Reschedule") : "Confirm Reschedule"
                 )}
               </Button>
             </div>
@@ -1099,10 +1145,12 @@ export function AppointmentCard({
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold">
-              Book Follow-up Consultation
+              {isPatient ? t("appointmentCard.followUpDialogTitle", "Book Follow-up Consultation") : "Book Follow-up Consultation"}
             </DialogTitle>
             <DialogDescription>
-              Schedule your included follow-up appointment with Dr. {otherParty?.name || "your doctor"}. Included at ₹0.
+              {isPatient
+                ? t("appointmentCard.followUpDialogDesc", "Schedule your included follow-up appointment with Dr. {doctor}. Included at ₹0.", { doctor: otherParty?.name || "your doctor" })
+                : `Schedule your included follow-up appointment with Dr. ${otherParty?.name || "your doctor"}. Included at ₹0.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1111,7 +1159,9 @@ export function AppointmentCard({
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5 space-y-1">
               <div className="flex items-center text-sm font-semibold text-foreground">
                 <Calendar className="mr-2 h-4 w-4 text-primary" />
-                Recommended follow-up timeframe: within {appointment.prescription?.followUpDays} days
+                {isPatient
+                  ? t("appointmentCard.followUpRecommendation", "Recommended follow-up timeframe: within {days} days", { days: appointment.prescription?.followUpDays })
+                  : `Recommended follow-up timeframe: within ${appointment.prescription?.followUpDays} days`}
               </div>
               {recommendedFollowUpDate && (
                 <p className="text-xs text-muted-foreground">
@@ -1126,13 +1176,13 @@ export function AppointmentCard({
               return (
                 <fieldset className="space-y-2">
                   <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Consultation Mode
+                    {isPatient ? t("appointmentCard.consultationMode", "Consultation Mode") : "Consultation Mode"}
                   </legend>
                   {supportedModes.length > 1 ? (
                     <div className="grid grid-cols-2 gap-3">
                       {[
-                        ["ONLINE", "Online Video Consultation"],
-                        ["OFFLINE", "In-person Clinic Consultation"],
+                        ["ONLINE", isPatient ? t("appointmentCard.onlineVideoMode", "Online Video Consultation") : "Online Video Consultation"],
+                        ["OFFLINE", isPatient ? t("appointmentCard.inPersonMode", "In-person Clinic Consultation") : "In-person Clinic Consultation"],
                       ].filter(([val]) => supportedModes.includes(val)).map(([val, label]) => (
                         <label
                           key={val}
@@ -1157,7 +1207,9 @@ export function AppointmentCard({
                   ) : (
                     <div className="rounded-md border border-border p-3 text-sm text-foreground">
                       <span className="font-medium">
-                        {supportedModes[0] === "OFFLINE" ? "In-person Clinic Consultation" : "Online Video Consultation"}
+                        {supportedModes[0] === "OFFLINE"
+                          ? (isPatient ? t("appointmentCard.inPersonMode", "In-person Clinic Consultation") : "In-person Clinic Consultation")
+                          : (isPatient ? t("appointmentCard.onlineVideoMode", "Online Video Consultation") : "Online Video Consultation")}
                       </span>
                       <span className="ml-2 text-xs text-muted-foreground">(Doctor supported mode)</span>
                     </div>
@@ -1169,13 +1221,13 @@ export function AppointmentCard({
             {/* Slot Picker */}
             <div className="space-y-3">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Select an Available Slot (20 minutes)
+                {isPatient ? t("appointmentCard.selectSlotHeader", "Select an Available Slot (20 minutes)") : "Select an Available Slot (20 minutes)"}
               </h4>
               <div className="max-h-60 space-y-4 overflow-y-auto rounded-lg border border-border p-3">
                 {followUpSlotsLoading ? (
                   <div className="py-8 text-center text-xs text-muted-foreground">
                     <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-primary" />
-                    Loading available slots...
+                    {isPatient ? t("appointmentCard.loadingSlots", "Loading available slots...") : "Loading available slots..."}
                   </div>
                 ) : followUpSlotsData?.days?.some((day) => day.slots.length > 0) ? (
                   followUpSlotsData.days.map((day) =>
@@ -1208,7 +1260,9 @@ export function AppointmentCard({
                   )
                 ) : (
                   <div className="py-8 text-center text-xs text-muted-foreground">
-                    No available appointments for this doctor right now. Please check back later.
+                    {isPatient
+                      ? t("appointmentCard.noAvailableFollowUpSlots", "No available appointments for this doctor right now. Please check back later.")
+                      : "No available appointments for this doctor right now. Please check back later."}
                   </div>
                 )}
               </div>
@@ -1217,13 +1271,13 @@ export function AppointmentCard({
             {/* Patient Description / Notes */}
             <div className="space-y-2">
               <label htmlFor="followUpNotes" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Reason or symptoms update (Optional)
+                {isPatient ? t("appointmentCard.reasonNotesLabel", "Reason or symptoms update (Optional)") : "Reason or symptoms update (Optional)"}
               </label>
               <Textarea
                 id="followUpNotes"
                 value={followUpNotes}
                 onChange={(e) => setFollowUpNotes(e.target.value)}
-                placeholder="Describe any symptoms or reason for this follow-up..."
+                placeholder={isPatient ? t("appointmentCard.reasonNotesPlaceholder", "Describe any symptoms or reason for this follow-up...") : "Describe any symptoms or reason for this follow-up..."}
                 maxLength={5000}
                 className="text-sm bg-background border-border min-h-[70px]"
               />
@@ -1232,9 +1286,11 @@ export function AppointmentCard({
             {/* Summary / Included ₹0 badge */}
             <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between text-xs">
               <div>
-                <span className="font-medium text-foreground">Consultation Fee:</span>
+                <span className="font-medium text-foreground">
+                  {isPatient ? t("appointmentCard.consultationFee", "Consultation Fee:") : "Consultation Fee:"}
+                </span>
                 <span className="ml-2 font-bold text-emerald-700 dark:text-emerald-400">
-                  Included (₹0)
+                  {isPatient ? t("appointmentCard.includedZero", "Included (₹0)") : "Included (₹0)"}
                 </span>
               </div>
               {selectedFollowUpSlot && (
@@ -1259,7 +1315,7 @@ export function AppointmentCard({
               onClick={() => setFollowUpOpen(false)}
               disabled={followUpLoading}
             >
-              Cancel
+              {isPatient ? t("appointmentCard.cancel", "Cancel") : "Cancel"}
             </Button>
             <Button
               type="button"
@@ -1270,10 +1326,10 @@ export function AppointmentCard({
               {followUpLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Scheduling Follow-up...
+                  {isPatient ? t("appointmentCard.schedulingFollowUp", "Scheduling Follow-up...") : "Scheduling Follow-up..."}
                 </>
               ) : (
-                "Confirm Follow-up (₹0)"
+                isPatient ? t("appointmentCard.confirmFollowUp", "Confirm Follow-up (₹0)") : "Confirm Follow-up (₹0)"
               )}
             </Button>
           </DialogFooter>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Calendar, FileText, FlaskConical, Home, Pill, Search } from "lucide-react";
+import { useLanguage } from "./language-provider";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home, exact: true },
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
 
 export function BottomNavigation() {
   const pathname = usePathname();
+  const { t } = useLanguage();
 
   // Hide on auth routes, in video consultations, or on admin routes
   if (
@@ -36,6 +38,7 @@ export function BottomNavigation() {
       <div className="flex h-16 items-center justify-around px-1">
         {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
           const isActive = exact ? pathname === href : pathname?.startsWith(href);
+          const displayLabel = t(`nav.${label.toLowerCase()}`, label);
 
           return (
             <Link
@@ -54,7 +57,7 @@ export function BottomNavigation() {
               >
                 <Icon className="size-4" />
               </div>
-              <span className="text-[11px] leading-tight tracking-tight">{label}</span>
+              <span className="text-[11px] leading-tight tracking-tight">{displayLabel}</span>
             </Link>
           );
         })}

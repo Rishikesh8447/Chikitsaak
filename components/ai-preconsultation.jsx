@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { generatePatientAiSummary } from "@/actions/ai";
 import { Loader2, Sparkles } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 
 function formatSummary(result) {
   const lines = [result.summary];
@@ -16,6 +17,7 @@ function formatSummary(result) {
 }
 
 export function AiPreconsultation({ description, summary, setSummary, specialtySuggestion, setSpecialtySuggestion }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -43,22 +45,22 @@ export function AiPreconsultation({ description, summary, setSummary, specialtyS
     <div className="space-y-3 rounded-md border border-emerald-900/20 bg-muted/10 p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-medium text-foreground">AI Assistance</p>
-          <p className="text-xs text-muted-foreground">Prepare a discussion summary from your own description.</p>
+          <p className="font-medium text-foreground">{t("aiPreconsultation.title", "AI Assistance")}</p>
+          <p className="text-xs text-muted-foreground">{t("aiPreconsultation.subtitle", "Prepare a discussion summary from your own description.")}</p>
         </div>
         <Button type="button" variant="outline" onClick={generate} disabled={loading || !description.trim()}>
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-          {summary ? "Regenerate" : "Generate"}
+          {summary ? t("aiPreconsultation.regenerate", "Regenerate") : t("aiPreconsultation.generate", "Generate")}
         </Button>
       </div>
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
       {summary && (
         <div className="space-y-2">
-          <label htmlFor="ai-summary" className="text-sm font-medium text-foreground">AI-generated summary (edit before booking)</label>
+          <label htmlFor="ai-summary" className="text-sm font-medium text-foreground">{t("aiPreconsultation.summaryLabel", "AI-generated summary (edit before booking)")}</label>
           <Textarea id="ai-summary" value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={5000} rows={8} />
-          <label htmlFor="ai-specialty" className="text-sm font-medium text-foreground">Possible specialty to consider (optional)</label>
+          <label htmlFor="ai-specialty" className="text-sm font-medium text-foreground">{t("aiPreconsultation.specialtyLabel", "Possible specialty to consider (optional)")}</label>
           <input id="ai-specialty" value={specialtySuggestion} onChange={(event) => setSpecialtySuggestion(event.target.value)} maxLength={120} className="h-10 w-full rounded-md border border-emerald-900/20 bg-background px-3 text-sm text-foreground" />
-          <p className="text-xs text-muted-foreground">AI-generated summary. This is not a medical diagnosis. Review it with your doctor.</p>
+          <p className="text-xs text-muted-foreground">{t("aiPreconsultation.disclaimer", "AI-generated summary. This is not a medical diagnosis. Review it with your doctor.")}</p>
         </div>
       )}
     </div>

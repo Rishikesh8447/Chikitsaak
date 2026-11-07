@@ -35,7 +35,7 @@ export function PageHeader({
         </div>
         {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>}
       </div>
-      {action || (backLink && <Button asChild variant="outline" size="sm" className="w-fit"><Link href={backLink}><ArrowLeft className="size-4" />{backLabel}</Link></Button>)}
+      {action || (backLink && <Button asChild variant="outline" size="sm" className="w-fit"><Link href={backLink} className="inline-flex items-center gap-1.5"><ArrowLeft className="size-4 shrink-0" /><span>{backLabel}</span></Link></Button>)}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import { User, BadgeCheck, CalendarDays, MapPin } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -5,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import { getSafeAvatarUrl } from "@/lib/avatar-image.mjs";
+import { useLanguage } from "./language-provider";
 
 export function DoctorCard({ doctor }) {
-  const name = typeof doctor.name === "string" && doctor.name.trim() && !/^(null|undefined)(\s+(null|undefined))?$/i.test(doctor.name.trim()) ? doctor.name.trim() : "Doctor";
+  const { t } = useLanguage();
+  const defaultDoctorName = t("doctorCard.defaultName", "Doctor");
+  const name = typeof doctor.name === "string" && doctor.name.trim() && !/^(null|undefined)(\s+(null|undefined))?$/i.test(doctor.name.trim()) ? doctor.name.trim() : defaultDoctorName;
   const specialty = typeof doctor.specialty === "string" && doctor.specialty.trim() ? doctor.specialty.trim() : "general";
-  const specialtyLabel = specialty === "general" ? "Healthcare specialist" : specialty;
+  const specialtyLabel = specialty === "general" ? t("doctorCard.generalSpecialist", "Healthcare specialist") : t(`hub.specialties.${specialty}`, specialty);
   const location = [doctor.city, doctor.state, doctor.country].filter((value) => typeof value === "string" && value.trim()).join(", ");
   const avatarUrl = getSafeAvatarUrl(doctor.imageUrl);
 
@@ -23,14 +28,36 @@ export function DoctorCard({ doctor }) {
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
               <h2 className="min-w-0 break-words text-base font-semibold tracking-tight sm:text-lg">{name}</h2>
-              <Badge variant="outline" className="shrink-0 gap-1 border-primary/20 bg-primary/5 text-primary"><BadgeCheck className="size-3.5" />Verified</Badge>
+              <Badge variant="outline" className="shrink-0 gap-1 border-primary/20 bg-primary/5 text-primary">
+                <BadgeCheck className="size-3.5" />
+                {t("doctorCard.verified", "Verified")}
+              </Badge>
             </div>
-            <div className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground"><span className="font-medium text-primary">{specialtyLabel}</span>{doctor.experience !== null && doctor.experience !== undefined && <span><span aria-hidden="true">·</span> {doctor.experience} years experience</span>}</div>
+            <div className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span className="font-medium text-primary">{specialtyLabel}</span>
+              {doctor.experience !== null && doctor.experience !== undefined && (
+                <span>
+                  <span aria-hidden="true">·</span> {doctor.experience} {t("doctorCard.yearsExperience", "years experience")}
+                </span>
+              )}
+            </div>
             {location && <p className="mt-1.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground"><MapPin className="size-3.5 shrink-0" />{location}</p>}
-            {doctor.description ? <p className="mt-3 line-clamp-3 min-h-[4.5rem] text-sm leading-6 text-muted-foreground">{doctor.description}</p> : <p className="mt-3 min-h-[4.5rem] text-sm leading-6 text-muted-foreground">No professional description provided.</p>}
+            {doctor.description ? (
+              <p className="mt-3 line-clamp-3 min-h-[4.5rem] text-sm leading-6 text-muted-foreground">{doctor.description}</p>
+            ) : (
+              <p className="mt-3 min-h-[4.5rem] text-sm leading-6 text-muted-foreground">{t("doctorCard.noDescription", "No professional description provided.")}</p>
+            )}
           </div>
         </div>
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><span className="text-xs text-muted-foreground">Verified care provider</span><Button asChild size="sm" className="min-h-9"><Link href={`/doctors/${encodeURIComponent(specialty)}/${doctor.id}`}><CalendarDays className="size-4" />View Profile & Book</Link></Button></div>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <span className="text-xs text-muted-foreground">{t("doctorCard.verifiedProvider", "Verified care provider")}</span>
+          <Button asChild size="sm" className="min-h-9 h-auto py-1.5 px-3 whitespace-nowrap">
+            <Link href={`/doctors/${encodeURIComponent(specialty)}/${doctor.id}`} className="inline-flex items-center gap-1.5">
+              <CalendarDays className="size-4 shrink-0" />
+              <span>{t("doctorCard.viewProfileBook", "View Profile & Book")}</span>
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

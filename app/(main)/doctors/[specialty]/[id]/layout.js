@@ -1,5 +1,5 @@
 import { getDoctorById } from '@/actions/appointments';
-import { PageHeader } from '@/components/page-header';
+import { DoctorProfileHeader } from '@/components/doctor-profile-header';
 import { notFound } from 'next/navigation';
 import React from 'react'
 
@@ -24,11 +24,7 @@ const DoctorProfileLayout = async({children,params}) => {
   return (
     
     <div className='container mx-auto px-4 py-8'> 
-      <PageHeader
-      title="Doctor Profile"
-      backLink={`/doctors/${encodeURIComponent(decodeURIComponent(specialty))}`}
-      backLabel={decodeURIComponent(specialty)}
-      />
+      <DoctorProfileHeader specialty={specialty} />
       {children}
     </div>
   )

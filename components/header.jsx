@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Show } from "@clerk/nextjs";
 import { CalendarDays, FileHeart, FlaskConical, LayoutDashboard, Pill, Search, ShieldCheck, UserRound, Users, ClipboardList, Package } from "lucide-react";
 import ThemeToggle from "./theme-toggle";
+import { LanguageToggle, PatientNavLabel } from "./language-toggle";
 import { checkUser } from "@/lib/checkUser";
 import HeaderAuth from "./header-auth";
 import { NotificationCenter } from "./notification-center";
@@ -64,10 +65,18 @@ const Header = async ({ user: initialUser } = {}) => {
 
         <nav aria-label="Primary" className="hidden min-w-0 flex-1 flex-row items-center justify-center gap-0.5 lg:flex">
           <Show when="signed-in">
-            {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="size-4" />{label}</Link>)}
+            {links.map(({ href, label, icon: Icon }) => (
+              <Link key={href} href={href} className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <Icon className="size-4" />
+                <PatientNavLabel label={label} isPatient={user?.role === "PATIENT"} />
+              </Link>
+            ))}
           </Show>
           <Show when="signed-out">
-            <Link href="/doctors" className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Search className="size-4" />Find care</Link>
+            <Link href="/doctors" className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <Search className="size-4" />
+              <PatientNavLabel label="Find care" isPatient={true} />
+            </Link>
           </Show>
         </nav>
 
@@ -75,6 +84,7 @@ const Header = async ({ user: initialUser } = {}) => {
           <Show when="signed-in">
             {user && <NotificationCenter />}
           </Show>
+          <LanguageToggle userRole={user?.role} />
           <ThemeToggle />
           <HeaderAuth />
         </div>
@@ -82,10 +92,18 @@ const Header = async ({ user: initialUser } = {}) => {
 
       <nav aria-label="Mobile" className="flex gap-1 overflow-x-auto border-t border-border/70 px-3 py-1.5 lg:hidden">
         <Show when="signed-in">
-          {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="size-3.5" />{label}</Link>)}
+          {links.map(({ href, label, icon: Icon }) => (
+            <Link key={href} href={href} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Icon className="size-3.5" />
+              <PatientNavLabel label={label} isPatient={user?.role === "PATIENT"} />
+            </Link>
+          ))}
         </Show>
         <Show when="signed-out">
-          <Link href="/doctors" className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"><Search className="size-3.5" />Find care</Link>
+          <Link href="/doctors" className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+            <Search className="size-3.5" />
+            <PatientNavLabel label="Find care" isPatient={true} />
+          </Link>
         </Show>
       </nav>
     </header>

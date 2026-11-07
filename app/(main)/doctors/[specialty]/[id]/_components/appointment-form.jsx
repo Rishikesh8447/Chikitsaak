@@ -11,8 +11,10 @@ import { createOfflineAppointmentCheckout, createOnlineAppointmentCheckout, veri
 import { toast } from "sonner";
 import { AiPreconsultation } from "@/components/ai-preconsultation";
 import { formatLocalSlotRange } from "@/lib/appointment-time.mjs";
+import { useLanguage } from "@/components/language-provider";
 
 export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplete }) {
+  const { t } = useLanguage();
   const [description, setDescription] = useState("");
   const [aiSummary, setAiSummary] = useState("");
   const [aiSpecialtySuggestion, setAiSpecialtySuggestion] = useState("");
@@ -134,15 +136,20 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
         <div className="flex items-center">
           <CreditCard className="mr-2 h-5 w-5 text-primary" />
           <span className="text-muted-foreground">
-            Appointment cost: <span className="font-semibold text-foreground">{Number.isInteger(priceRupees) ? `₹${priceRupees}` : "Price unavailable"}</span>
+            {t("appointmentForm.appointmentCost", "Appointment cost: {price}", {
+              price: Number.isInteger(priceRupees) ? `₹${priceRupees}` : t("appointmentForm.priceUnavailable", "Price unavailable"),
+            })}
           </span>
         </div>
       </div>
 
       <fieldset className="space-y-3">
-        <legend className="text-sm font-medium text-foreground">Consultation type</legend>
+        <legend className="text-sm font-medium text-foreground">{t("appointmentForm.consultationType", "Consultation type")}</legend>
         <div className="grid gap-3 sm:grid-cols-2">
-          {[["ONLINE", "Online consultation"], ["OFFLINE", "In-person consultation"]].map(([value, label]) => (
+          {[
+            ["ONLINE", t("appointmentForm.onlineConsultation", "Online consultation")],
+            ["OFFLINE", t("appointmentForm.inPersonConsultation", "In-person consultation")],
+          ].map(([value, label]) => (
             <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md border border-border p-3 text-sm">
               <input type="radio" name="consultationMode" value={value} checked={consultationMode === value} onChange={() => { setConsultationMode(value); setActiveCheckout(null); }} />
               <span>{label}</span>
@@ -153,33 +160,39 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
 
       {consultationMode === "OFFLINE" && (
         <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-foreground">Payment method</legend>
+          <legend className="text-sm font-medium text-foreground">{t("appointmentForm.paymentMethod", "Payment method")}</legend>
           <div className="grid gap-3 sm:grid-cols-2">
-            {[["CASH", "Cash at consultation"], ["UPI_QR", "Razorpay UPI / QR"]].map(([value, label]) => (
+            {[
+              ["CASH", t("appointmentForm.cashAtConsultation", "Cash at consultation")],
+              ["UPI_QR", t("appointmentForm.razorpayUpiQr", "Razorpay UPI / QR")],
+            ].map(([value, label]) => (
               <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md border border-border p-3 text-sm">
                 <input type="radio" name="offlinePaymentMethod" value={value} checked={offlinePaymentMethod === value} onChange={() => { setOfflinePaymentMethod(value); setActiveCheckout(null); }} />
                 <span>{label}</span>
               </label>
             ))}
           </div>
-          {offlinePaymentMethod === "CASH" && <p className="text-sm text-muted-foreground">Cash will remain due until it is collected; selecting cash does not record a payment.</p>}
+          {offlinePaymentMethod === "CASH" && (
+            <p className="text-sm text-muted-foreground">
+              {t("appointmentForm.cashExplanation", "Cash will remain due until it is collected; selecting cash does not record a payment.")}
+            </p>
+          )}
         </fieldset>
       )}
 
       <div className="space-y-2">
         <Label htmlFor="description">
-          Describe your medical concern (optional)
+          {t("appointmentForm.concernLabel", "Describe your medical concern (optional)")}
         </Label>
         <Textarea
           id="description"
-          placeholder="Please provide any details about your medical concern or what you'd like to discuss in the appointment..."
+          placeholder={t("appointmentForm.concernPlaceholder", "Please provide any details about your medical concern or what you'd like to discuss in the appointment...")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           className="h-32 bg-background"
         />
         <p className="text-sm text-muted-foreground">
-          This information will be shared with the doctor before your
-          appointment.
+          {t("appointmentForm.concernGuidance", "This information will be shared with the doctor before your appointment.")}
         </p>
       </div>
 
@@ -194,7 +207,7 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
           className="w-full sm:w-auto"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Change Time Slot
+          {t("appointmentForm.changeTimeSlot", "Change Time Slot")}
         </Button>
         <Button
           type="submit"
@@ -204,10 +217,16 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Booking...
+              {t("appointmentForm.booking", "Booking...")}
             </>
           ) : (
-            (consultationMode === "ONLINE" || offlinePaymentMethod === "UPI_QR") && !razorpayReady ? "Loading secure checkout..." : consultationMode === "OFFLINE" && offlinePaymentMethod === "CASH" ? "Book with cash due" : activeCheckout ? "Continue checkout" : "Pay and Book"
+            (consultationMode === "ONLINE" || offlinePaymentMethod === "UPI_QR") && !razorpayReady
+              ? t("appointmentForm.loadingCheckout", "Loading secure checkout...")
+              : consultationMode === "OFFLINE" && offlinePaymentMethod === "CASH"
+                ? t("appointmentForm.bookWithCashDue", "Book with cash due")
+                : activeCheckout
+                  ? t("appointmentForm.continueCheckout", "Continue checkout")
+                  : t("appointmentForm.payAndBook", "Pay and Book")
           )}
         </Button>
       </div>

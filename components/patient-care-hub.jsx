@@ -1,14 +1,17 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Calendar, FileText, FlaskConical, HeartPulse, Pill, Search, ShieldCheck, Stethoscope, Video, Clock } from "lucide-react";
+import { ArrowRight, Calendar, FileText, FlaskConical, HeartPulse, Pill, ShieldCheck, Stethoscope, Video, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VesselHeroSearch } from "./vessel-hero-search";
+import { useLanguage } from "./language-provider";
 
-function formatDateTime(dateString) {
+function formatDateTime(dateString, locale = "en") {
   const d = new Date(dateString);
-  return d.toLocaleDateString("en-IN", {
+  return d.toLocaleDateString(locale === "hi" ? "hi-IN" : "en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -17,8 +20,11 @@ function formatDateTime(dateString) {
   });
 }
 
-function formatStatus(status) {
-  return status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
+function formatStatus(status, t) {
+  if (!status) return "";
+  const key = `hub.statuses.${status.toLowerCase()}`;
+  const fallback = status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
+  return t ? t(key, fallback) : fallback;
 }
 
 /**
@@ -52,6 +58,7 @@ function getGreetingDisplayName(name) {
 }
 
 export function PatientCareHub({ user, nextAppointment, recentPrescriptions = [], recentLabOrders = [] }) {
+  const { t, locale } = useLanguage();
   const displayName = getGreetingDisplayName(user?.name);
 
   return (
@@ -73,47 +80,47 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-foreground">Chikitsaak Medical Faculty</p>
-                <p className="text-[11px] text-muted-foreground truncate">Accredited clinicians across 12+ specialties</p>
+                <p className="text-xs font-semibold text-foreground">{t("hub.facultyTitle", "Chikitsaak Medical Faculty")}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{t("hub.facultySubtitle", "Accredited clinicians across 12+ specialties")}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 mb-3">
               <Badge variant="outline" className="gap-1.5 border-primary/20 bg-secondary px-3 py-1 text-xs text-primary font-medium">
                 <HeartPulse className="size-3.5" />
-                <span>Personal Care Hub</span>
+                <span>{t("hub.badge", "Personal Care Hub")}</span>
               </Badge>
             </div>
 
             <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
               {displayName ? (
                 <>
-                  Welcome back, <span className="text-primary">{displayName}</span>.
+                  {t("hub.welcomeBack", "Welcome back")}, <span className="text-primary">{displayName}</span>.
                 </>
               ) : (
-                <>Welcome back.</>
+                <>{t("hub.welcomeBack", "Welcome back")}.</>
               )}
             </h1>
 
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base max-w-xl">
-              Your consultations, pathology diagnostics, active prescriptions, and health dossier — coordinated in one calm, private space.
+              {t("hub.welcomeSubtitle", "Your consultations, pathology diagnostics, active prescriptions, and health dossier — coordinated in one calm, private space.")}
             </p>
 
             {/* Quick Search */}
             <div className="mt-6 max-w-xl">
-              <VesselHeroSearch placeholder="Search specialists, laboratory tests, or medications..." />
+              <VesselHeroSearch placeholder={t("hub.searchPlaceholder", "Search specialists, laboratory tests, or medications...")} />
             </div>
 
             {/* Quick Specialty Chips */}
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Common specialties:</span>
+              <span className="font-medium text-foreground">{t("hub.commonSpecialties", "Common specialties:")}</span>
               {["General Medicine", "Cardiology", "Dermatology", "Pediatrics", "Gynecology"].map((spec) => (
                 <Link
                   key={spec}
                   href={`/doctors/${encodeURIComponent(spec)}`}
                   className="rounded-full border border-border bg-background px-3 py-1 transition-colors hover:border-primary/40 hover:text-foreground"
                 >
-                  {spec}
+                  {t(`hub.specialties.${spec}`, spec)}
                 </Link>
               ))}
             </div>
@@ -135,9 +142,9 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
               <div className="mt-2.5 flex items-center justify-between px-2 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                   <ShieldCheck className="size-3.5 text-primary" />
-                  Verified Specialists
+                  {t("hub.verifiedSpecialists", "Verified Specialists")}
                 </span>
-                <span className="text-[11px] text-muted-foreground">20-min Unhurried Visits</span>
+                <span className="text-[11px] text-muted-foreground">{t("hub.unhurriedVisits", "20-min Unhurried Visits")}</span>
               </div>
             </div>
           </div>
@@ -152,30 +159,38 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <Calendar className="size-3.5" />
-                Upcoming visit
+                {t("hub.upcomingVisit", "Upcoming visit")}
               </span>
               {nextAppointment && (
                 <Badge variant={nextAppointment.status === "CONFIRMED" ? "default" : "outline"} className="text-xs">
-                  {formatStatus(nextAppointment.status)}
+                  {formatStatus(nextAppointment.status, t)}
                 </Badge>
               )}
             </div>
             <CardTitle className="text-base font-semibold text-foreground">
-              {nextAppointment ? `Dr. ${nextAppointment.doctor?.name || "Doctor"}` : "No upcoming visits"}
+              {nextAppointment
+                ? `${locale === "hi" ? "डॉ." : "Dr."} ${nextAppointment.doctor?.name || (locale === "hi" ? "डॉक्टर" : "Doctor")}`
+                : t("hub.noUpcomingVisits", "No upcoming visits")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
             {nextAppointment ? (
               <>
-                <p className="text-xs text-muted-foreground">{nextAppointment.doctor?.specialty || "Specialist"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {nextAppointment.doctor?.specialty
+                    ? t(`hub.specialties.${nextAppointment.doctor.specialty}`, nextAppointment.doctor.specialty)
+                    : (locale === "hi" ? "विशेषज्ञ" : "Specialist")}
+                </p>
                 <div className="flex items-center gap-2 text-xs font-medium text-foreground">
                   <Clock className="size-3.5 text-primary" />
-                  <span>{formatDateTime(nextAppointment.startTime)}</span>
-                  <span className="text-muted-foreground">({nextAppointment.consultationMode === "ONLINE" ? "Video visit" : "In clinic"})</span>
+                  <span>{formatDateTime(nextAppointment.startTime, locale)}</span>
+                  <span className="text-muted-foreground">
+                    ({nextAppointment.consultationMode === "ONLINE" ? t("hub.videoVisit", "Video visit") : t("hub.inClinic", "In clinic")})
+                  </span>
                 </div>
                 {nextAppointment.payment && (
                   <p className="text-xs text-muted-foreground">
-                    Fee: ₹{nextAppointment.payment.amountRupees} · {formatStatus(nextAppointment.payment.status)}
+                    {t("hub.fee", "Fee:")} ₹{nextAppointment.payment.amountRupees} · {formatStatus(nextAppointment.payment.status, t)}
                   </p>
                 )}
                 <div className="pt-2">
@@ -185,14 +200,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
                       className={buttonVariants({ size: "sm", className: "w-full gap-1.5" })}
                     >
                       <Video className="size-3.5" />
-                      Join consultation
+                      {t("hub.joinConsultation", "Join consultation")}
                     </Link>
                   ) : (
                     <Link
                       href="/appointments"
                       className={buttonVariants({ variant: "outline", size: "sm", className: "w-full" })}
                     >
-                      View appointment details
+                      {t("hub.viewAppointmentDetails", "View appointment details")}
                     </Link>
                   )}
                 </div>
@@ -200,13 +215,13 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
             ) : (
               <div className="py-2">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  You have no visits scheduled right now. Search doctors to book a 20-minute video or clinic consultation.
+                  {t("hub.noVisitsDescription", "You have no visits scheduled right now. Search doctors to book a 20-minute video or clinic consultation.")}
                 </p>
                 <Link
                   href="/doctors"
                   className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4 w-full" })}
                 >
-                  Book a consultation
+                  {t("hub.bookConsultation", "Book a consultation")}
                 </Link>
               </div>
             )}
@@ -219,14 +234,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <FlaskConical className="size-3.5" />
-                Laboratory tests
+                {t("hub.laboratoryTests", "Laboratory tests")}
               </span>
               <Link href="/laboratory" className="text-xs text-primary hover:underline">
-                View all
+                {t("hub.viewAll", "View all")}
               </Link>
             </div>
             <CardTitle className="text-base font-semibold text-foreground">
-              {recentLabOrders.length ? "Active Diagnostics" : "Diagnostic Pathology"}
+              {recentLabOrders.length ? t("hub.activeDiagnostics", "Active Diagnostics") : t("hub.diagnosticPathology", "Diagnostic Pathology")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
@@ -237,7 +252,7 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
                     <div className="flex items-center justify-between font-medium">
                       <span className="truncate">{order.items?.map((i) => i.testName).join(", ") || "Lab test"}</span>
                       <Badge variant="outline" className="text-[10px]">
-                        {formatStatus(order.status)}
+                        {formatStatus(order.status, t)}
                       </Badge>
                     </div>
                     {order.laboratory?.name && (
@@ -249,19 +264,19 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
                   href="/laboratory"
                   className={buttonVariants({ variant: "outline", size: "sm", className: "w-full" })}
                 >
-                  Manage test orders
+                  {t("hub.manageTestOrders", "Manage test orders")}
                 </Link>
               </div>
             ) : (
               <div className="py-2">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Order accredited lab tests directly or review diagnostic investigations prescribed by your clinician.
+                  {t("hub.noLabOrdersDescription", "Order accredited lab tests directly or review diagnostic investigations prescribed by your clinician.")}
                 </p>
                 <Link
                   href="/laboratory"
                   className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4 w-full" })}
                 >
-                  Browse available tests
+                  {t("hub.browseAvailableTests", "Browse available tests")}
                 </Link>
               </div>
             )}
@@ -274,14 +289,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <Pill className="size-3.5" />
-                Medications
+                {t("hub.medications", "Medications")}
               </span>
               <Link href="/pharmacy" className="text-xs text-primary hover:underline">
-                Pharmacy
+                {t("nav.pharmacy", "Pharmacy")}
               </Link>
             </div>
             <CardTitle className="text-base font-semibold text-foreground">
-              {recentPrescriptions.length ? "Recent Prescriptions" : "Pharmacy & Medicines"}
+              {recentPrescriptions.length ? t("hub.recentPrescriptions", "Recent Prescriptions") : t("hub.pharmacyAndMedicines", "Pharmacy & Medicines")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 pt-0">
@@ -290,13 +305,13 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
                 {recentPrescriptions.map((rx) => (
                   <div key={rx.id} className="rounded-lg border border-border/70 bg-secondary/30 p-2.5 text-xs">
                     <div className="flex items-center justify-between font-medium">
-                      <span>{rx.diagnosis || "Consultation prescription"}</span>
+                      <span>{rx.diagnosis || t("hub.consultationPrescription", "Consultation prescription")}</span>
                       {rx.followUpRequired && (
-                        <span className="text-[10px] font-semibold text-primary">₹0 Follow-up</span>
+                        <span className="text-[10px] font-semibold text-primary">{t("hub.freeFollowUp", "₹0 Follow-up")}</span>
                       )}
                     </div>
                     <p className="mt-1 text-muted-foreground">
-                      {rx.medicines?.map((m) => m.name).join(", ") || "Prescribed medicines"}
+                      {rx.medicines?.map((m) => m.name).join(", ") || t("hub.prescribedMedicines", "Prescribed medicines")}
                     </p>
                   </div>
                 ))}
@@ -304,19 +319,19 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
                   href="/medical-records"
                   className={buttonVariants({ variant: "outline", size: "sm", className: "w-full" })}
                 >
-                  View full prescription
+                  {t("hub.viewFullPrescription", "View full prescription")}
                 </Link>
               </div>
             ) : (
               <div className="py-2">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Your prescriptions from completed consultations and medication schedules will be organized here.
+                  {t("hub.noPrescriptionsDescription", "Your prescriptions from completed consultations and medication schedules will be organized here.")}
                 </p>
                 <Link
                   href="/pharmacy"
                   className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4 w-full" })}
                 >
-                  Explore medicines & pharmacy
+                  {t("hub.exploreMedicinesPharmacy", "Explore medicines & pharmacy")}
                 </Link>
               </div>
             )}
@@ -327,10 +342,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
       {/* 4 Core Vessel Service Portals */}
       <section className="space-y-4">
         <div>
-          <Badge variant="outline" className="text-xs text-primary bg-secondary border-primary/20 mb-2">Healthcare services</Badge>
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Comprehensive care portals</h2>
+          <Badge variant="outline" className="text-xs text-primary bg-secondary border-primary/20 mb-2">
+            {t("hub.portalsBadge", "Healthcare services")}
+          </Badge>
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("hub.portalsTitle", "Comprehensive care portals")}
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            Everything you need for considered, end-to-end outpatient and digital care.
+            {t("hub.portalsSubtitle", "Everything you need for considered, end-to-end outpatient and digital care.")}
           </p>
         </div>
 
@@ -341,12 +360,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
               <div className="flex size-11 items-center justify-center rounded-xl bg-secondary text-primary transition-transform group-hover:scale-105">
                 <Stethoscope className="size-5" />
               </div>
-              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">Find Doctors</h3>
+              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">
+                {t("hub.portalDoctorsTitle", "Find Doctors")}
+              </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Browse certified physicians across 12+ specialties with transparent fees and 20-minute consultation slots.
+                {t("hub.portalDoctorsDesc", "Browse certified physicians across 12+ specialties with transparent fees and 20-minute consultation slots.")}
               </p>
               <div className="mt-4 flex items-center text-xs font-medium text-primary">
-                <span>Browse clinicians</span>
+                <span>{t("hub.portalDoctorsAction", "Browse clinicians")}</span>
                 <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-1" />
               </div>
             </Card>
@@ -358,12 +379,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
               <div className="flex size-11 items-center justify-center rounded-xl bg-secondary text-primary transition-transform group-hover:scale-105">
                 <Calendar className="size-5" />
               </div>
-              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">My Appointments</h3>
+              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">
+                {t("hub.portalAppointmentsTitle", "My Appointments")}
+              </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Review scheduled visits, join secure HD video calls, manage bookings, and access consultation history.
+                {t("hub.portalAppointmentsDesc", "Review scheduled visits, join secure HD video calls, manage bookings, and access consultation history.")}
               </p>
               <div className="mt-4 flex items-center text-xs font-medium text-primary">
-                <span>Manage visits</span>
+                <span>{t("hub.portalAppointmentsAction", "Manage visits")}</span>
                 <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-1" />
               </div>
             </Card>
@@ -375,12 +398,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
               <div className="flex size-11 items-center justify-center rounded-xl bg-secondary text-primary transition-transform group-hover:scale-105">
                 <FlaskConical className="size-5" />
               </div>
-              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">Diagnostic Labs</h3>
+              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">
+                {t("hub.portalDiagnosticsTitle", "Diagnostic Labs")}
+              </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Book blood tests, pathology panels, and sample collections from accredited laboratories with certified reports.
+                {t("hub.portalDiagnosticsDesc", "Book blood tests, pathology panels, and sample collections from accredited laboratories with certified reports.")}
               </p>
               <div className="mt-4 flex items-center text-xs font-medium text-primary">
-                <span>Schedule lab tests</span>
+                <span>{t("hub.portalDiagnosticsAction", "Schedule lab tests")}</span>
                 <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-1" />
               </div>
             </Card>
@@ -392,12 +417,14 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
               <div className="flex size-11 items-center justify-center rounded-xl bg-secondary text-primary transition-transform group-hover:scale-105">
                 <Pill className="size-5" />
               </div>
-              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">Pharmacy & Medicines</h3>
+              <h3 className="mt-4 font-semibold text-foreground group-hover:text-primary">
+                {t("hub.portalPharmacyTitle", "Pharmacy & Medicines")}
+              </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Discover medicines and products from verified pharmacies, check availability, and review prescription instructions.
+                {t("hub.portalPharmacyDesc", "Discover medicines and products from verified pharmacies, check availability, and review prescription instructions.")}
               </p>
               <div className="mt-4 flex items-center text-xs font-medium text-primary">
-                <span>Explore pharmacy</span>
+                <span>{t("hub.portalPharmacyAction", "Explore pharmacy")}</span>
                 <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-1" />
               </div>
             </Card>
@@ -411,13 +438,15 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
           <div>
             <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
               <ShieldCheck className="size-3.5" />
-              Clinical record
+              {t("hub.clinicalRecord", "Clinical record")}
             </span>
-            <h2 className="mt-1 text-xl font-semibold text-foreground">Your Medical Dossier</h2>
+            <h2 className="mt-1 text-xl font-semibold text-foreground">
+              {t("hub.medicalDossierTitle", "Your Medical Dossier")}
+            </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Blood group: <span className="font-medium text-foreground">{user?.bloodGroup || "Not specified"}</span> ·
-              Allergies: <span className="font-medium text-foreground">{user?.allergies || "None recorded"}</span> ·
-              Conditions: <span className="font-medium text-foreground">{user?.existingConditions || "None recorded"}</span>
+              {t("hub.bloodGroup", "Blood group:")} <span className="font-medium text-foreground">{user?.bloodGroup || t("hub.notSpecified", "Not specified")}</span> ·{" "}
+              {t("hub.allergies", "Allergies:")} <span className="font-medium text-foreground">{user?.allergies || t("hub.noneRecorded", "None recorded")}</span> ·{" "}
+              {t("hub.conditions", "Conditions:")} <span className="font-medium text-foreground">{user?.existingConditions || t("hub.noneRecorded", "None recorded")}</span>
             </p>
           </div>
           <Link
@@ -425,7 +454,7 @@ export function PatientCareHub({ user, nextAppointment, recentPrescriptions = []
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <FileText className="mr-1.5 size-4" />
-            Update health dossier
+            {t("hub.updateDossier", "Update health dossier")}
           </Link>
         </div>
       </section>
