@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 import { db } from "@/lib/prisma";
 import { verifyAdmin } from "@/actions/admin";
 import { canTransitionLabOrder, canTransitionLaboratory, getEligibleLaboratories, normalizeCatalogKey, normalizeIdList, parseMoney } from "@/lib/laboratory-workflow.mjs";
@@ -245,34 +245,47 @@ export async function getLaboratoryWorkspace(requestedLaboratoryId) {
   };
 }
 
+const getCachedAvailableLaboratoryTests = unstable_cache(
+  async () => {
+    const [tests, laboratories] = await Promise.all([
+      db.labTest.findMany({
+        where: { isActive: true, offerings: { some: { isAvailable: true, laboratory: { is: { status: "VERIFIED" } } } } },
+        select: { id: true, name: true, code: true, category: true, description: true },
+        orderBy: { name: "asc" },
+      }),
+      db.laboratory.findMany({
+        where: { status: "VERIFIED", offerings: { some: { isAvailable: true, labTest: { is: { isActive: true } } } } },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          state: true,
+          offerings: {
+            where: { isAvailable: true, labTest: { is: { isActive: true } } },
+            select: { id: true, laboratoryId: true, labTestId: true, price: true, preparationInstructions: true, estimatedHours: true, labTest: { select: { name: true, category: true, description: true } } },
+          },
+        },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+    return {
+      tests,
+      laboratories: laboratories.map((laboratory) => ({
+        ...laboratory,
+        offerings: laboratory.offerings.map((offering) => ({ ...offering, price: offering.price.toFixed(2) })),
+      })),
+    };
+  },
+  ["available-laboratory-tests"],
+  {
+    revalidate: 60,
+    tags: ["laboratory-catalog"],
+  }
+);
+
 export async function getAvailableLaboratoryTests() {
   await currentUser();
-  const tests = await db.labTest.findMany({
-    where: { isActive: true, offerings: { some: { isAvailable: true, laboratory: { is: { status: "VERIFIED" } } } } },
-    select: { id: true, name: true, code: true, category: true, description: true },
-    orderBy: { name: "asc" },
-  });
-  const laboratories = await db.laboratory.findMany({
-    where: { status: "VERIFIED", offerings: { some: { isAvailable: true, labTest: { is: { isActive: true } } } } },
-    select: {
-      id: true,
-      name: true,
-      city: true,
-      state: true,
-      offerings: {
-        where: { isAvailable: true, labTest: { is: { isActive: true } } },
-        select: { id: true, laboratoryId: true, labTestId: true, price: true, preparationInstructions: true, estimatedHours: true, labTest: { select: { name: true, category: true, description: true } } },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
-  return {
-    tests,
-    laboratories: laboratories.map((laboratory) => ({
-      ...laboratory,
-      offerings: laboratory.offerings.map((offering) => ({ ...offering, price: offering.price.toFixed(2) })),
-    })),
-  };
+  return getCachedAvailableLaboratoryTests();
 }
 
 export async function getDoctorLabOrderOptions() {
@@ -563,6 +576,7 @@ export async function saveLaboratoryOffering(formData) {
     });
     await addAudit(tx, { actorUserId: user.id, laboratoryId, entityType: "LaboratoryOffering", entityId: offering.id, action: "OFFERING_SAVED" });
   }, laboratoryTransactionOptions);
+  updateTag("laboratory-catalog");
   revalidatePath("/laboratory");
   revalidatePath("/laboratory/workspace");
   revalidatePath("/doctor/laboratory");
@@ -580,6 +594,7 @@ export async function setLaboratoryOfferingAvailability(formData) {
     if (changed.count !== 1) throw new Error("Offering not found");
     await addAudit(tx, { actorUserId: user.id, laboratoryId, entityType: "LaboratoryOffering", entityId: offeringId, action: available ? "OFFERING_ENABLED" : "OFFERING_DISABLED" });
   }, laboratoryTransactionOptions);
+  updateTag("laboratory-catalog");
   for (const route of labRoutes) revalidatePath(route);
   return { success: true };
 }
@@ -626,6 +641,7 @@ export async function updateLaboratoryStatus(formData) {
       skipDuplicates: true,
     });
   }, laboratoryTransactionOptions);
+  updateTag("laboratory-catalog");
   revalidatePath("/admin");
   revalidatePath("/laboratory");
   revalidatePath("/doctor/laboratory");
@@ -643,6 +659,7 @@ export async function createLabTest(formData) {
     await addAudit(tx, { actorUserId: admin.id, entityType: "LabTest", entityId: created.id, action: "CATALOG_TEST_CREATED" });
     return created;
   }, laboratoryTransactionOptions);
+  updateTag("laboratory-catalog");
   revalidatePath("/admin");
   revalidatePath("/laboratory");
   revalidatePath("/doctor/laboratory");
@@ -658,6 +675,7 @@ export async function setLabTestActive(formData) {
     if (changed.count !== 1) throw new Error("Test catalog entry was updated or removed");
     await addAudit(tx, { actorUserId: admin.id, entityType: "LabTest", entityId: labTestId, action: isActive ? "CATALOG_TEST_ENABLED" : "CATALOG_TEST_DISABLED" });
   }, laboratoryTransactionOptions);
+  updateTag("laboratory-catalog");
   revalidatePath("/admin");
   revalidatePath("/laboratory");
   revalidatePath("/doctor/laboratory");

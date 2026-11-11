@@ -105,6 +105,8 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
   const dependencies = {
     auth: async () => ({ userId }),
     revalidatePath() {},
+    unstable_cache: (cb) => cb,
+    updateTag() {},
     db: {
       user: { findUnique: async () => ({ id: userId, clerkUserId: userId, role }) },
       $transaction: async (callback) => callback(tx),
@@ -122,7 +124,7 @@ async function loadActions({ role = "PATIENT", userId = "user-a", membership = n
   const transformed = source
     .replace('"use server";', "")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
-    .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
+    .replace('import { revalidatePath, unstable_cache, updateTag } from "next/cache";', "const { revalidatePath, unstable_cache, updateTag } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { verifyAdmin } from "@/actions/admin";', "const { verifyAdmin } = dependencies;")
     .replace(/import \{[\s\S]*?\} from ["']@\/lib\/pharmacy-workflow\.mjs["'];/, "const { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, validateProductDates, isProductExpired, parseDateOnly, formatDateOnly } = dependencies;")

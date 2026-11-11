@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { clerkClient } from "@clerk/nextjs/server";
@@ -33,27 +34,75 @@ function serializeDoctorForAdmin(doctor) {
   return publicFields;
 }
 
-async function getClerkDisplayName(clerkUserId, fallbackName) {
+const CLERK_USER_BATCH_SIZE = 100;
+
+function formatClerkDisplayName(clerkUser, fallbackName) {
   const databaseName = normalizeDoctorName(fallbackName);
 
-  if (!clerkUserId) {
+  if (!clerkUser) {
     return databaseName;
+  }
+
+  const displayName = [clerkUser.firstName, clerkUser.lastName]
+    .map(normalizeDoctorName)
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return displayName || databaseName;
+}
+
+async function fetchClerkUsersById(clerkUserIds) {
+  const usersById = new Map();
+  const uniqueIds = [...new Set(clerkUserIds.filter(Boolean))];
+
+  if (!uniqueIds.length) {
+    return usersById;
   }
 
   try {
     const client = await clerkClient();
-    const clerkUser = await client.users.getUser(clerkUserId);
-    const displayName = [clerkUser.firstName, clerkUser.lastName]
-      .map(normalizeDoctorName)
-      .filter(Boolean)
-      .join(" ")
-      .trim();
 
-    return displayName || databaseName;
+    if (typeof client?.users?.getUserList === "function") {
+      for (let i = 0; i < uniqueIds.length; i += CLERK_USER_BATCH_SIZE) {
+        const chunk = uniqueIds.slice(i, i + CLERK_USER_BATCH_SIZE);
+        try {
+          const response = await client.users.getUserList({
+            userId: chunk,
+            limit: chunk.length,
+          });
+          const users = Array.isArray(response) ? response : response?.data || [];
+          for (const user of users) {
+            if (user?.id) {
+              usersById.set(user.id, user);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to batch resolve Clerk display names.");
+        }
+      }
+      return usersById;
+    }
+
+    if (typeof client?.users?.getUser === "function") {
+      await Promise.all(
+        uniqueIds.map(async (clerkUserId) => {
+          try {
+            const clerkUser = await client.users.getUser(clerkUserId);
+            if (clerkUser) {
+              usersById.set(clerkUserId, clerkUser);
+            }
+          } catch (error) {
+            console.error("Failed to resolve Clerk display name.");
+          }
+        })
+      );
+    }
   } catch (error) {
-    console.error("Failed to resolve Clerk display name.");
-    return databaseName;
+    console.error("Failed to resolve Clerk display names.");
   }
+
+  return usersById;
 }
 
 function normalizeDoctorName(value) {
@@ -65,33 +114,36 @@ function normalizeDoctorName(value) {
 }
 
 async function hydrateDoctorNames(doctors) {
-  return Promise.all(
-    doctors.map(async (doctor) => ({
-      ...doctor,
-      name: await getClerkDisplayName(doctor.clerkUserId, doctor.name),
-    }))
+  const usersById = await fetchClerkUsersById(
+    doctors.map((doctor) => doctor.clerkUserId)
   );
+
+  return doctors.map((doctor) => ({
+    ...doctor,
+    name: formatClerkDisplayName(usersById.get(doctor.clerkUserId), doctor.name),
+  }));
 }
 
-async function hydratePayoutDoctorNames(payouts) {
-  return Promise.all(
-    payouts.map(async (payout) => ({
-      ...payout,
-      doctor: {
-        ...payout.doctor,
-        name: await getClerkDisplayName(
-          payout.doctor.clerkUserId,
-          payout.doctor.name
-        ),
-      },
-    }))
-  );
+async function hydratePayoutDoctorNames(payouts, preloadedUsersById = null) {
+  const usersById =
+    preloadedUsersById ||
+    (await fetchClerkUsersById(
+      payouts.map((payout) => payout.doctor?.clerkUserId)
+    ));
+
+  return payouts.map((payout) => ({
+    ...payout,
+    doctor: {
+      ...payout.doctor,
+      name: formatClerkDisplayName(
+        usersById.get(payout.doctor?.clerkUserId),
+        payout.doctor?.name
+      ),
+    },
+  }));
 }
 
-/**
- * Verifies if current user has admin role
- */
-export async function verifyAdmin() {
+const verifyAdminCached = cache(async () => {
   const { userId } = await auth();
 
   if (!userId) {
@@ -114,6 +166,13 @@ export async function verifyAdmin() {
     console.error("Failed to verify admin.", { errorName, errorCode });
     return false;
   }
+});
+
+/**
+ * Verifies if current user has admin role
+ */
+export async function verifyAdmin() {
+  return verifyAdminCached();
 }
 
 /**
@@ -201,6 +260,8 @@ export async function updateDoctorStatus(formData) {
     });
 
     revalidatePath("/admin");
+    revalidatePath("/doctors");
+    revalidatePath("/doctors/[specialty]", "page");
     return { success: true };
   } catch (error) {
     console.error("Failed to update doctor status.");
@@ -239,6 +300,8 @@ export async function updateDoctorActiveStatus(formData) {
     if (changed.count !== 1) throw new Error("Doctor status could not be updated");
 
     revalidatePath("/admin");
+    revalidatePath("/doctors");
+    revalidatePath("/doctors/[specialty]", "page");
     return { success: true };
   } catch (error) {
     console.error("Failed to update doctor active status.");
@@ -297,8 +360,12 @@ export async function getPendingPayouts() {
       orderBy: { reviewRequiredAt: "desc" },
     });
 
-    const payoutsWithNames = await hydratePayoutDoctorNames(pendingPayouts);
-    const payoutIssuesWithNames = await hydratePayoutDoctorNames(paymentPayoutIssues);
+    const payoutUsersById = await fetchClerkUsersById([
+      ...pendingPayouts.map((payout) => payout.doctor?.clerkUserId),
+      ...paymentPayoutIssues.map((payout) => payout.doctor?.clerkUserId),
+    ]);
+    const payoutsWithNames = await hydratePayoutDoctorNames(pendingPayouts, payoutUsersById);
+    const payoutIssuesWithNames = await hydratePayoutDoctorNames(paymentPayoutIssues, payoutUsersById);
     return {
       payouts: payoutsWithNames.map(({ doctor, ...payout }) => ({
         ...payout,

@@ -155,8 +155,13 @@ export async function createPrescription(formData) {
 export async function getMyMedicalRecords() {
   const user = await authenticatedUser();
   if (user.role !== "PATIENT") throw new Error("Only patients can access medical records");
-  const [profile, appointments, prescriptions] = await Promise.all([
-    db.user.findUnique({ where: { id: user.id }, select: { bloodGroup: true, allergies: true, existingConditions: true, currentMedications: true } }),
+  const profile = {
+    bloodGroup: user.bloodGroup ?? null,
+    allergies: user.allergies ?? null,
+    existingConditions: user.existingConditions ?? null,
+    currentMedications: user.currentMedications ?? null,
+  };
+  const [appointments, prescriptions] = await Promise.all([
     db.appointment.findMany({
       where: { patientId: user.id },
       select: {
@@ -168,7 +173,15 @@ export async function getMyMedicalRecords() {
       },
       orderBy: { startTime: "desc" },
     }),
-    db.prescription.findMany({ where: { patientId: user.id }, include: { doctor: { select: { name: true, specialty: true } }, appointment: { select: { startTime: true } }, medicines: true }, orderBy: { createdAt: "desc" } }),
+    db.prescription.findMany({
+      where: { patientId: user.id },
+      include: {
+        doctor: { select: { name: true, specialty: true } },
+        appointment: { select: { startTime: true } },
+        medicines: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
   return { profile, appointments, prescriptions };
 }

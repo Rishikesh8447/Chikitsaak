@@ -77,6 +77,8 @@ async function loadActions({
   const dependencies = {
     auth: async () => ({ userId: user?.clerkUserId || null }),
     revalidatePath() {},
+    unstable_cache: (cb) => cb,
+    updateTag() {},
     db: {
       user: { findUnique: async () => user },
       $transaction: async (callback) => {
@@ -101,7 +103,7 @@ async function loadActions({
   const transformed = source
     .replaceAll('"use server";', "")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
-    .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
+    .replace('import { revalidatePath, unstable_cache, updateTag } from "next/cache";', "const { revalidatePath, unstable_cache, updateTag } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { verifyAdmin } from "@/actions/admin";', "const { verifyAdmin } = dependencies;")
     .replace('import { canTransitionLabOrder, canTransitionLaboratory, getEligibleLaboratories, normalizeCatalogKey, normalizeIdList, parseMoney } from "@/lib/laboratory-workflow.mjs";', "const { canTransitionLabOrder, canTransitionLaboratory, getEligibleLaboratories, normalizeCatalogKey, normalizeIdList, parseMoney } = dependencies;")

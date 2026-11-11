@@ -35,6 +35,7 @@ async function loadAction({ user = { id: "doctor-a", role: "DOCTOR", verificatio
   };
   const transformed = source
     .replaceAll('"use server";', "")
+    .replace('import { getCurrentUser } from "@/actions/onboarding";', "const { getCurrentUser = async () => null } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")

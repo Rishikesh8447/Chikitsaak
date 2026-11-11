@@ -23,6 +23,7 @@ async function loadEarningsAction({
       },
     },
     auth: async () => ({ userId: "clerk-doctor" }),
+    getCurrentUser: async () => doctor,
     revalidatePath: () => {},
     measureServerTiming: async (_label, cb) => cb(),
     withSerializableRetries: async (fn) => fn(),

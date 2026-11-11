@@ -47,6 +47,8 @@ test("PostgreSQL laboratory workflow database contracts", { skip: !enabled }, as
     const dependencies = {
       auth: async () => ({ userId: clerkUserId }),
       revalidatePath() {},
+      unstable_cache: (cb) => cb,
+      updateTag() {},
       db,
       verifyAdmin: async () => (await prisma.user.findUnique({ where: { clerkUserId }, select: { role: true } }))?.role === "ADMIN",
       canTransitionLabOrder,
@@ -60,7 +62,7 @@ test("PostgreSQL laboratory workflow database contracts", { skip: !enabled }, as
     const transformed = source
       .replaceAll('"use server";', "")
       .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
-      .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
+      .replace('import { revalidatePath, unstable_cache, updateTag } from "next/cache";', "const { revalidatePath, unstable_cache, updateTag } = dependencies;")
       .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
       .replace('import { verifyAdmin } from "@/actions/admin";', "const { verifyAdmin } = dependencies;")
       .replace('import { canTransitionLabOrder, canTransitionLaboratory, getEligibleLaboratories, normalizeCatalogKey, normalizeIdList, parseMoney } from "@/lib/laboratory-workflow.mjs";', "const { canTransitionLabOrder, canTransitionLaboratory, getEligibleLaboratories, normalizeCatalogKey, normalizeIdList, parseMoney } = dependencies;")

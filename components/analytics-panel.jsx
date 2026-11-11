@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +18,7 @@ import {
   AlertCircle,
   FileCheck,
 } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 
 const metricMeta = {
   users: {
@@ -97,16 +100,42 @@ const metricMeta = {
   },
 };
 
+const metricKeyMap = {
+  users: "analytics.metricUsers",
+  doctors: "analytics.metricDoctors",
+  patients: "analytics.metricPatients",
+  totalAppointments: "analytics.metricTotalConsultations",
+  total: "analytics.metricTotalAppointments",
+  completed: "analytics.metricCompletedVisits",
+  upcoming: "analytics.metricUpcomingVisits",
+  cancelled: "analytics.metricCancelledVisits",
+  noShow: "analytics.metricNoShows",
+  patientsTreated: "analytics.metricPatientsTreated",
+  doctorsConsulted: "analytics.metricDoctorsConsulted",
+};
+
+const statusKeyMap = {
+  COMPLETED: "analytics.statusCompleted",
+  CONFIRMED: "analytics.statusConfirmed",
+  IN_PROGRESS: "analytics.statusInProgress",
+  SCHEDULED: "analytics.statusScheduled",
+  CANCELLED: "analytics.statusCancelled",
+  NO_SHOW: "analytics.statusNoShow",
+  PENDING: "analytics.statusPending",
+  VERIFIED: "analytics.statusVerified",
+  REJECTED: "analytics.statusRejected",
+};
+
 function MetricCards({ metrics, admin = false }) {
+  const { t } = useLanguage();
   if (!metrics) return null;
 
   return (
     <div
-      className={`grid min-w-0 w-full ${
-        admin
+      className={`grid min-w-0 w-full ${admin
           ? "grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 sm:gap-4"
           : "grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-      }`}
+        }`}
     >
       {Object.entries(metrics).map(([key, value]) => {
         const meta = metricMeta[key] || {
@@ -117,6 +146,7 @@ function MetricCards({ metrics, admin = false }) {
           bg: "bg-primary/10",
         };
         const Icon = meta.icon;
+        const displayLabel = metricKeyMap[key] ? t(metricKeyMap[key], meta.label) : meta.label;
 
         return (
           <div
@@ -125,7 +155,7 @@ function MetricCards({ metrics, admin = false }) {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-muted-foreground truncate">
-                {meta.label}
+                {displayLabel}
               </span>
               <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
                 <Icon className={`size-4 ${meta.color}`} />
@@ -149,16 +179,18 @@ function MetricCards({ metrics, admin = false }) {
   );
 }
 
-function TrendBarChart({ title, data = [], emptyLabel = "No appointment data recorded for this period." }) {
+function TrendBarChart({ title, data = [], emptyLabel }) {
+  const { t } = useLanguage();
   const max = Math.max(1, ...data.map((item) => item.count));
   const hasData = data.some((item) => item.count > 0);
   const total = data.reduce((sum, item) => sum + item.count, 0);
+  const resolvedEmptyLabel = emptyLabel || t("analytics.noAppointmentActivity", "No appointment activity recorded in this period.");
 
   if (!hasData) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 p-8 text-center text-xs text-muted-foreground">
         <Activity className="size-6 text-muted-foreground/40 mb-2" />
-        <p>{emptyLabel}</p>
+        <p>{resolvedEmptyLabel}</p>
       </div>
     );
   }
@@ -166,8 +198,10 @@ function TrendBarChart({ title, data = [], emptyLabel = "No appointment data rec
   return (
     <div className="space-y-3">
       <div className="flex items-baseline justify-between text-xs text-muted-foreground">
-        <span>Volume distribution</span>
-        <span className="font-medium text-foreground tabular-nums">Total: {total.toLocaleString()}</span>
+        <span>{t("analytics.volumeDistribution", "Volume distribution")}</span>
+        <span className="font-medium text-foreground tabular-nums">
+          {t("analytics.total", "Total: {count}", { count: total.toLocaleString() })}
+        </span>
       </div>
 
       <div
@@ -185,11 +219,10 @@ function TrendBarChart({ title, data = [], emptyLabel = "No appointment data rec
               title={`${item.label}: ${item.count} consultations`}
             >
               <div
-                className={`w-full max-w-[28px] rounded-t-md transition-all duration-300 ${
-                  item.count > 0
+                className={`w-full max-w-[28px] rounded-t-md transition-all duration-300 ${item.count > 0
                     ? "bg-primary group-hover:bg-primary/80"
                     : "bg-muted/40 group-hover:bg-muted/60"
-                }`}
+                  }`}
                 style={{ height: `${heightPct}%` }}
               />
             </div>
@@ -211,6 +244,7 @@ function TrendBarChart({ title, data = [], emptyLabel = "No appointment data rec
 }
 
 function StatusBreakdownBars({ data = [] }) {
+  const { t } = useLanguage();
   const total = data.reduce((sum, item) => sum + item.count, 0);
   const hasData = data.some((item) => item.count > 0);
 
@@ -230,7 +264,7 @@ function StatusBreakdownBars({ data = [] }) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 p-8 text-center text-xs text-muted-foreground">
         <Activity className="size-6 text-muted-foreground/40 mb-2" />
-        <p>No status records available for this period.</p>
+        <p>{t("analytics.noStatusRecords", "No status records available for this period.")}</p>
       </div>
     );
   }
@@ -243,12 +277,15 @@ function StatusBreakdownBars({ data = [] }) {
           bar: "bg-primary",
           badge: "border-primary/20 bg-primary/10 text-primary",
         };
+        const statusLabel = statusKeyMap[item.status]
+          ? t(statusKeyMap[item.status], item.status.replaceAll("_", " "))
+          : item.status.replaceAll("_", " ");
 
         return (
           <div key={item.status} className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium text-foreground">
-                {item.status.replaceAll("_", " ")}
+                {statusLabel}
               </span>
               <div className="flex items-center gap-2">
                 <span className="tabular-nums font-semibold text-foreground">{item.count}</span>
@@ -332,6 +369,7 @@ function DoctorVerificationSummary({ data = [] }) {
 }
 
 export function AnalyticsPanel({ title, analytics, basePath, admin = false }) {
+  const { t } = useLanguage();
   const ranges = [7, 30, 90, 365];
   const activeRange = Number(analytics?.range) || 30;
 
@@ -345,11 +383,11 @@ export function AnalyticsPanel({ title, analytics, basePath, admin = false }) {
               <BarChart3 className="size-4.5" />
             </div>
             <h2 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
-              {title || "Platform Analytics"}
+              {title || t("analytics.defaultTitle", "Platform Analytics")}
             </h2>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Database-backed operational summary for the selected reporting period.
+            {t("analytics.headerSubtitle", "Database-backed operational summary for the selected reporting period.")}
           </p>
         </div>
 
@@ -365,14 +403,15 @@ export function AnalyticsPanel({ title, analytics, basePath, admin = false }) {
               <Link key={range} href={href} scroll={false}>
                 <Badge
                   variant={isActive ? "default" : "outline"}
-                  className={`cursor-pointer px-3 py-1 text-xs transition-all ${
-                    isActive
+                  className={`cursor-pointer px-3 py-1 text-xs transition-all ${isActive
                       ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
+                    }`}
                   aria-checked={isActive}
                 >
-                  Last {range === 365 ? "year" : `${range} days`}
+                  {range === 365
+                    ? t("analytics.lastYear", "Last year")
+                    : t("analytics.lastDays", "Last {count} days", { count: range })}
                 </Badge>
               </Link>
             );
@@ -390,17 +429,17 @@ export function AnalyticsPanel({ title, analytics, basePath, admin = false }) {
           <CardHeader className="gap-1 p-4 sm:p-5 pb-2">
             <CardTitle className="text-sm sm:text-base font-semibold text-foreground flex items-center gap-2">
               <CalendarCheck className="size-4 text-primary" />
-              <span>Appointments over time</span>
+              <span>{t("analytics.appointmentsOverTime", "Appointments over time")}</span>
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Trend of consultation bookings across the active period.
+              {t("analytics.appointmentsOverTimeDesc", "Trend of consultation bookings across the active period.")}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 pt-2">
             <TrendBarChart
               title="Appointments"
               data={analytics?.trend}
-              emptyLabel="No appointment activity recorded in this period."
+              emptyLabel={t("analytics.noAppointmentActivity", "No appointment activity recorded in this period.")}
             />
           </CardContent>
         </Card>
@@ -410,10 +449,10 @@ export function AnalyticsPanel({ title, analytics, basePath, admin = false }) {
           <CardHeader className="gap-1 p-4 sm:p-5 pb-2">
             <CardTitle className="text-sm sm:text-base font-semibold text-foreground flex items-center gap-2">
               <Activity className="size-4 text-primary" />
-              <span>Status breakdown</span>
+              <span>{t("analytics.statusBreakdown", "Status breakdown")}</span>
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Distribution of scheduled, completed, and cancelled visits.
+              {t("analytics.statusBreakdownDesc", "Distribution of scheduled, completed, and cancelled visits.")}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 pt-2">

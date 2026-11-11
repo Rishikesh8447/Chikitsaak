@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getDoctorsBySpecialty } from "@/actions/doctors-listing";
 import { DoctorSpecialtyView } from "@/components/doctor-specialty-view";
 
+export const revalidate = 60;
+
 export default async function DoctorSpecialtyPage({ params }) {
   const { specialty } = await params;
 

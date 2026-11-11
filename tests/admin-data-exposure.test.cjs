@@ -49,6 +49,7 @@ async function loadAdminDataActions({ doctorName = "Dr Example", experience = 5,
   Object.assign(dependencies, await import("../lib/payment-payouts.mjs"));
   const transformed = (await adminSource)
     .replaceAll('"use server";', "")
+    .replace('import { cache } from "react";', "const { cache = (fn) => fn } = dependencies;")
     .replaceAll("export async function", "async function")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
@@ -138,6 +139,7 @@ async function loadAdminAnalytics({ role = "ADMIN", failQuery = false, failAuth 
   const dependencies = { auth: async () => ({ userId: "clerk-user" }), db, measureServerTiming: async (_label, operation) => operation() };
   const transformed = (await analyticsSource)
     .replaceAll('"use server";', "")
+    .replace('import { getCurrentUser } from "@/actions/onboarding";', "const { getCurrentUser = async () => null } = dependencies;")
     .replaceAll("export async function", "async function")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")

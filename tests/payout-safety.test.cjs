@@ -49,11 +49,13 @@ async function makeAdminAction({ role = "ADMIN", transferReference = null, alloc
     db,
     auth: async () => ({ userId: "clerk-admin" }),
     clerkClient: async () => ({ users: { getUser: async () => ({}) } }),
+    cache: (fn) => fn,
     revalidatePath: () => {},
     ...await import("../lib/payment-payouts.mjs"),
   };
   const transformed = (await sourcePromise)
     .replaceAll('"use server";', "")
+    .replace('import { cache } from "react";', "const { cache = (fn) => fn } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { clerkClient } from "@clerk/nextjs/server";', "const { clerkClient } = dependencies;")
@@ -95,6 +97,7 @@ async function makePayoutRequest({ userId = "clerk-doctor", role = "DOCTOR", ver
   const dependencies = {
     db,
     auth: async () => ({ userId }),
+    getCurrentUser: async () => ({ id: "doctor-1", role: "DOCTOR", verificationStatus: "VERIFIED" }),
     revalidatePath: () => {},
     measureServerTiming: async (_label, operation) => operation(),
     ...await import("../lib/payment-payouts.mjs"),
@@ -102,6 +105,7 @@ async function makePayoutRequest({ userId = "clerk-doctor", role = "DOCTOR", ver
   };
   const transformed = (await payoutSourcePromise)
     .replaceAll('"use server";', "")
+    .replace('import { getCurrentUser } from "@/actions/onboarding";', "const { getCurrentUser = async () => null } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")

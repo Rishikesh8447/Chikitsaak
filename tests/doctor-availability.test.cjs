@@ -62,6 +62,7 @@ async function loadDoctorAvailabilityModule({
 
   const dependencies = {
     auth: async () => ({ userId }),
+    getCurrentUser: async () => (userId ? doctor : null),
     revalidatePath: (path) => state.revalidated.push(path),
     db: {
       user: {
@@ -89,7 +90,7 @@ async function loadDoctorAvailabilityModule({
 
   const factory = new Function(
     "dependencies",
-    `const { auth, revalidatePath, db, canTransitionAppointment, cancelAppointmentInTransaction, CANCELLATION_ERRORS, createAppointmentNotificationPair, parseConsultationPriceRupees, sendAppointmentConfirmedEmail, sendAppointmentCancelledEmail } = dependencies;
+    `const { auth, getCurrentUser, revalidatePath, db, canTransitionAppointment, cancelAppointmentInTransaction, CANCELLATION_ERRORS, createAppointmentNotificationPair, parseConsultationPriceRupees, sendAppointmentConfirmedEmail, sendAppointmentCancelledEmail } = dependencies;
      ${transformed}
      return { getDoctorAvailability, setAvailabilitySlots, updateAvailabilitySlot, removeAvailabilitySlot };`
   );

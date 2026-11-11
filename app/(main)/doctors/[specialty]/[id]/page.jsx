@@ -6,20 +6,20 @@ import { measureServerTiming } from "@/lib/server-timing.mjs";
 
 export default async function DoctorProfilePage({ params }) {
   const { id } = await params;
-  const isDirectDoctorId = typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-  const reviewsPromise = measureServerTiming("doctorProfile.reviews", () => getDoctorReviews(id)).catch(() => null);
-  const slotsPromise = isDirectDoctorId
-    ? measureServerTiming("doctorProfile.availability", () => getAvailableTimeSlots(id)).catch(() => null)
-    : null;
-  const doctorDataPromise = measureServerTiming("doctorProfile.doctorLookupAndName", () => getDoctorById(id));
-
-  const doctorData = await doctorDataPromise;
-  if (!doctorData.doctor) notFound();
+  const doctorData = await measureServerTiming("doctorProfile.doctorLookupAndName", () => getDoctorById(id));
+  if (!doctorData?.doctor) notFound();
 
   const [slotsData, reviewsData] = await Promise.all([
-    slotsPromise || measureServerTiming("doctorProfile.availability", () => getAvailableTimeSlots(doctorData.doctor.id)),
-    doctorData.doctor.id === id ? reviewsPromise : measureServerTiming("doctorProfile.reviews", () => getDoctorReviews(doctorData.doctor.id)),
+    measureServerTiming("doctorProfile.availability", () =>
+      getAvailableTimeSlots(doctorData.doctor.id, undefined, doctorData.doctor)
+    ).catch(() => null),
+    measureServerTiming("doctorProfile.reviews", () =>
+      getDoctorReviews(doctorData.doctor.id)
+    ).catch(() => null),
   ]);
-  return <DoctorProfile doctor={doctorData.doctor} availableDays={slotsData?.days || []} reviews={reviewsData} />;
+
+  const { [Symbol.for("chikitsaak.verifiedDoctor")]: _tag, ...clientDoctor } = doctorData.doctor;
+
+  return <DoctorProfile doctor={clientDoctor} availableDays={slotsData?.days || []} reviews={reviewsData} />;
 }

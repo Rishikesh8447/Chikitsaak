@@ -1,5 +1,6 @@
 "use server"
 
+import { cache } from "react";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
@@ -77,9 +78,7 @@ export async function resubmitDoctorProfile(formData) {
   revalidatePath("/admin");
   return { success: true, redirect: "/doctor/verification" };
 }
-/*Gets the current user's complete profile information
- */
-export async function getCurrentUser() {
+const getCurrentUserCached = cache(async () => {
   const { userId } = await auth();
 
   if (!userId) {
@@ -98,4 +97,10 @@ export async function getCurrentUser() {
     console.error("Failed to get user information:", error?.message || error);
     throw new Error("Unable to load your account right now. Please try again later.");
   }
+});
+
+/*Gets the current user's complete profile information
+ */
+export async function getCurrentUser() {
+  return getCurrentUserCached();
 }

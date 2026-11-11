@@ -28,14 +28,21 @@ const roleLinks = {
 
 const Header = async ({ user: initialUser } = {}) => {
   const user = initialUser === undefined ? await checkUser() : initialUser;
-  const partnerMemberships = user?.laboratoryMemberships && user?.pharmacyMemberships
-    ? [user.laboratoryMemberships[0], user.pharmacyMemberships[0]]
-    : user && ["PATIENT", "DOCTOR", "UNASSIGNED"].includes(user.role)
-      ? await measureServerTiming("layout.partnerMembershipQueries", () => Promise.all([
-          db.laboratoryMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
-          db.pharmacyMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
-        ]))
-      : [];
+  const [partnerMemberships, initialUnreadCount] = await Promise.all([
+    user?.laboratoryMemberships && user?.pharmacyMemberships
+      ? Promise.resolve([user.laboratoryMemberships[0], user.pharmacyMemberships[0]])
+      : user && ["PATIENT", "DOCTOR", "UNASSIGNED"].includes(user.role)
+        ? measureServerTiming("layout.partnerMembershipQueries", () => Promise.all([
+            db.laboratoryMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
+            db.pharmacyMembership.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { id: true } }),
+          ]))
+        : Promise.resolve([]),
+    user?.id
+      ? measureServerTiming("layout.unreadNotificationCount", () =>
+          db.notification.count({ where: { userId: user.id, readAt: null } }).catch(() => undefined)
+        )
+      : Promise.resolve(undefined),
+  ]);
   const isLaboratoryPartner = Boolean(partnerMemberships[0]);
   const isPharmacyPartner = Boolean(partnerMemberships[1]);
   const isPartner = isLaboratoryPartner || isPharmacyPartner;
@@ -82,7 +89,7 @@ const Header = async ({ user: initialUser } = {}) => {
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Show when="signed-in">
-            {user && <NotificationCenter />}
+            {user && <NotificationCenter initialUnreadCount={initialUnreadCount} />}
           </Show>
           <LanguageToggle userRole={user?.role} />
           <ThemeToggle />

@@ -7,12 +7,17 @@ import { generatePatientAiSummary } from "@/actions/ai";
 import { Loader2, Sparkles } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 
-function formatSummary(result) {
+function formatSummary(result, t) {
   const lines = [result.summary];
-  if (result.symptoms.length) lines.push(`\nSymptoms mentioned:\n${result.symptoms.map((item) => `- ${item}`).join("\n")}`);
-  if (result.duration) lines.push(`\nDuration:\n${result.duration}`);
-  if (result.relevantInformation.length) lines.push(`\nRelevant information provided:\n${result.relevantInformation.map((item) => `- ${item}`).join("\n")}`);
-  if (result.questions.length) lines.push(`\nQuestions to discuss:\n${result.questions.map((item) => `- ${item}`).join("\n")}`);
+  const symptomsLabel = t ? t("aiPreconsultation.symptomsHeader", "Symptoms mentioned:") : "Symptoms mentioned:";
+  const durationLabel = t ? t("aiPreconsultation.durationHeader", "Duration:") : "Duration:";
+  const infoLabel = t ? t("aiPreconsultation.infoProvidedHeader", "Relevant information provided:") : "Relevant information provided:";
+  const questionsLabel = t ? t("aiPreconsultation.questionsHeader", "Questions to discuss:") : "Questions to discuss:";
+
+  if (result.symptoms.length) lines.push(`\n${symptomsLabel}\n${result.symptoms.map((item) => `- ${item}`).join("\n")}`);
+  if (result.duration) lines.push(`\n${durationLabel}\n${result.duration}`);
+  if (result.relevantInformation.length) lines.push(`\n${infoLabel}\n${result.relevantInformation.map((item) => `- ${item}`).join("\n")}`);
+  if (result.questions.length) lines.push(`\n${questionsLabel}\n${result.questions.map((item) => `- ${item}`).join("\n")}`);
   return lines.join("\n").trim();
 }
 
@@ -26,16 +31,17 @@ export function AiPreconsultation({ description, summary, setSummary, specialtyS
     setError("");
     const formData = new FormData();
     formData.append("description", description);
+    const fallbackError = t("aiPreconsultation.unavailable", "AI assistance is temporarily unavailable. You can continue manually.");
     try {
       const result = await generatePatientAiSummary(formData);
       if (!result.success) {
-        setError(result.error || "AI assistance is temporarily unavailable. You can continue manually.");
+        setError(result.error || fallbackError);
       } else {
-        setSummary(formatSummary(result.summary));
+        setSummary(formatSummary(result.summary, t));
         setSpecialtySuggestion(result.summary.specialtySuggestion || "");
       }
     } catch {
-      setError("AI assistance is temporarily unavailable. You can continue manually.");
+      setError(fallbackError);
     } finally {
       setLoading(false);
     }

@@ -15,12 +15,14 @@ async function loadCheckUser({ clerkUser, existingUser }) {
     create: async (args) => { state.creates.push(args); return args.data; },
   } };
   const transformed = source
+    .replace('import { cache } from "react";', "const { cache = (fn) => fn } = dependencies;")
     .replace('import { currentUser } from "@clerk/nextjs/server";', "const { currentUser } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { measureServerTiming } from "@/lib/server-timing.mjs";', "const { measureServerTiming } = dependencies;")
-    .replace("export const checkUser = async () =>", "const checkUser = async () =>")
+    .replace("export const checkUser = cache(async () =>", "const checkUser = cache(async () =>")
     .concat("\nreturn { checkUser };");
   const checkUser = new Function("dependencies", transformed)({
+    cache: (fn) => fn,
     currentUser: async () => clerkUser,
     db,
     measureServerTiming: async (_label, cb) => cb(),

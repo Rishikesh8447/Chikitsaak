@@ -7,6 +7,7 @@ import useFetch from "@/hooks/use-fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useLanguage } from "@/components/language-provider";
 import {
   addLaboratoryMember,
   bookDoctorLabOrder,
@@ -98,45 +99,162 @@ export function DoctorLabOrderForm({ appointments, tests }) {
 }
 
 export function PatientBookingForm({ laboratories }) {
+  const { t } = useLanguage();
   const [laboratoryId, setLaboratoryId] = useState(laboratories[0]?.id || "");
-  const { loading, handleSubmit, error } = useLabSubmit(createPatientLabOrder, "Laboratory booking request submitted");
+  const { loading, handleSubmit, error } = useLabSubmit(
+    createPatientLabOrder,
+    t("laboratory.bookingSuccess", "Laboratory booking request submitted")
+  );
   const selected = laboratories.find((lab) => lab.id === laboratoryId);
-  return <form onSubmit={handleSubmit} className="space-y-4">
-    <label className={inputClass}>Laboratory
-      <select name="laboratoryId" required value={laboratoryId} onChange={(event) => setLaboratoryId(event.target.value)} className="h-11 rounded-md border border-input bg-card px-3 text-sm">
-        {laboratories.map((lab) => <option key={lab.id} value={lab.id}>{lab.name} · {lab.city}, {lab.state}</option>)}
-      </select>
-    </label>
-    <fieldset className="grid gap-2 sm:grid-cols-2">
-      <legend className="mb-2 text-sm font-medium">Available tests</legend>
-      {(selected?.offerings || []).map((offering) => <label key={offering.id} className="grid min-h-11 grid-cols-[auto_1fr_auto] items-start gap-2 rounded-md border border-border px-3 py-2 text-sm"><input type="checkbox" name="offeringIds" value={offering.id} className="mt-1" /><span><span className="font-medium">{offering.labTest.name}</span>{offering.labTest.category && <span className="ml-2 text-xs text-muted-foreground">{offering.labTest.category}</span>}{offering.labTest.description && <span className="block text-xs text-muted-foreground">{offering.labTest.description}</span>}{offering.preparationInstructions && <span className="mt-1 block text-xs">Preparation: {offering.preparationInstructions}</span>}{offering.estimatedHours && <span className="block text-xs text-muted-foreground">Estimated turnaround: {offering.estimatedHours} hours</span>}</span><span className="text-muted-foreground">{Number(offering.price).toFixed(2)}</span></label>)}
-      {!selected?.offerings?.length && <p className="text-sm text-muted-foreground">No available offerings at this laboratory.</p>}
-    </fieldset>
-    <label className={inputClass}>Clinical instructions (optional)<Textarea name="clinicalInstructions" maxLength={3000} /></label>
-    <ActionError error={error} /><Button type="submit" disabled={loading || !selected?.offerings?.length}>{loading ? "Booking…" : "Request selected tests"}</Button>
-  </form>;
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <label className={inputClass}>
+        {t("laboratory.selectLab", "Laboratory")}
+        <select
+          name="laboratoryId"
+          required
+          value={laboratoryId}
+          onChange={(event) => setLaboratoryId(event.target.value)}
+          className="h-11 rounded-md border border-input bg-card px-3 text-sm"
+        >
+          {laboratories.map((lab) => (
+            <option key={lab.id} value={lab.id}>
+              {lab.name} · {lab.city}, {lab.state}
+            </option>
+          ))}
+        </select>
+      </label>
+      <fieldset className="grid gap-2 sm:grid-cols-2">
+        <legend className="mb-2 text-sm font-medium">
+          {t("laboratory.availableTests", "Available tests")}
+        </legend>
+        {(selected?.offerings || []).map((offering) => (
+          <label
+            key={offering.id}
+            className="grid min-h-11 grid-cols-[auto_1fr_auto] items-start gap-2 rounded-md border border-border px-3 py-2 text-sm"
+          >
+            <input type="checkbox" name="offeringIds" value={offering.id} className="mt-1" />
+            <span>
+              <span className="font-medium">{offering.labTest.name}</span>
+              {offering.labTest.category && (
+                <span className="ml-2 text-xs text-muted-foreground">{offering.labTest.category}</span>
+              )}
+              {offering.labTest.description && (
+                <span className="block text-xs text-muted-foreground">{offering.labTest.description}</span>
+              )}
+              {offering.preparationInstructions && (
+                <span className="mt-1 block text-xs">
+                  {t("laboratory.preparation", "Preparation: {instructions}", { instructions: offering.preparationInstructions })}
+                </span>
+              )}
+              {offering.estimatedHours && (
+                <span className="block text-xs text-muted-foreground">
+                  {t("laboratory.turnaroundHours", "Estimated turnaround: {hours} hours", { hours: offering.estimatedHours })}
+                </span>
+              )}
+            </span>
+            <span className="text-muted-foreground">{Number(offering.price).toFixed(2)}</span>
+          </label>
+        ))}
+        {!selected?.offerings?.length && (
+          <p className="text-sm text-muted-foreground">
+            {t("laboratory.noOfferings", "No available offerings at this laboratory.")}
+          </p>
+        )}
+      </fieldset>
+      <label className={inputClass}>
+        {t("laboratory.clinicalInstructions", "Clinical instructions (optional)")}
+        <Textarea name="clinicalInstructions" maxLength={3000} />
+      </label>
+      <ActionError error={error} />
+      <Button type="submit" disabled={loading || !selected?.offerings?.length}>
+        {loading
+          ? t("laboratory.bookingBtnLoading", "Booking…")
+          : t("laboratory.requestTestsBtn", "Request selected tests")}
+      </Button>
+    </form>
+  );
 }
 
 export function PatientChooseLabForm({ orderId, laboratories }) {
-  const { loading, handleSubmit, error } = useLabSubmit(bookDoctorLabOrder, "Laboratory selected; the lab has been notified");
+  const { t } = useLanguage();
+  const { loading, handleSubmit, error } = useLabSubmit(
+    bookDoctorLabOrder,
+    t("laboratory.confirmLabSuccess", "Laboratory selected; the lab has been notified")
+  );
   const [laboratoryId, setLaboratoryId] = useState("");
   const selected = laboratories.find((lab) => lab.id === laboratoryId);
-  return <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
-    <input type="hidden" name="labOrderId" value={orderId} />
-    <label className={`${inputClass} min-w-52 flex-1`}>Choose a laboratory
-      <select name="laboratoryId" required value={laboratoryId} onChange={(event) => setLaboratoryId(event.target.value)} className="h-10 rounded-md border border-input bg-card px-3 text-sm">
-        <option value="" disabled>Select an eligible laboratory</option>
-        {laboratories.map((lab) => <option key={lab.id} value={lab.id}>{lab.name}</option>)}
-      </select>
-    </label>
-    {selected && <div className="w-full rounded-md border border-border p-3 text-sm"><p className="font-medium">Review services and prices at {selected.name}</p>{selected.offerings.map((offering) => <p key={offering.labTestId} className="mt-2"><span className="font-medium">{offering.labTest.name}</span>{offering.labTest.category && ` · ${offering.labTest.category}`} · {Number(offering.price).toFixed(2)}{offering.estimatedHours ? ` · ${offering.estimatedHours} hour turnaround` : ""}{offering.preparationInstructions ? ` · Preparation: ${offering.preparationInstructions}` : ""}{offering.labTest.description ? <span className="block text-xs text-muted-foreground">{offering.labTest.description}</span> : null}</p>)}</div>}
-    <ActionError error={error} /><Button type="submit" size="sm" disabled={loading || !selected}>{loading ? "Saving…" : "Confirm laboratory"}</Button>
-  </form>;
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="labOrderId" value={orderId} />
+      <label className={`${inputClass} min-w-52 flex-1`}>
+        {t("laboratory.chooseLabLabel", "Choose a laboratory")}
+        <select
+          name="laboratoryId"
+          required
+          value={laboratoryId}
+          onChange={(event) => setLaboratoryId(event.target.value)}
+          className="h-10 rounded-md border border-input bg-card px-3 text-sm"
+        >
+          <option value="" disabled>
+            {t("laboratory.selectEligibleLab", "Select an eligible laboratory")}
+          </option>
+          {laboratories.map((lab) => (
+            <option key={lab.id} value={lab.id}>
+              {lab.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selected && (
+        <div className="w-full rounded-md border border-border p-3 text-sm">
+          <p className="font-medium">
+            {t("laboratory.reviewServicesAt", "Review services and prices at {name}", { name: selected.name })}
+          </p>
+          {selected.offerings.map((offering) => (
+            <p key={offering.labTestId} className="mt-2">
+              <span className="font-medium">{offering.labTest.name}</span>
+              {offering.labTest.category && ` · ${offering.labTest.category}`} · {Number(offering.price).toFixed(2)}
+              {offering.estimatedHours
+                ? ` · ${t("laboratory.hourTurnaround", "{hours} hour turnaround", { hours: offering.estimatedHours })}`
+                : ""}
+              {offering.preparationInstructions
+                ? ` · ${t("laboratory.preparation", "Preparation: {instructions}", { instructions: offering.preparationInstructions })}`
+                : ""}
+              {offering.labTest.description ? (
+                <span className="block text-xs text-muted-foreground">{offering.labTest.description}</span>
+              ) : null}
+            </p>
+          ))}
+        </div>
+      )}
+      <ActionError error={error} />
+      <Button type="submit" size="sm" disabled={loading || !selected}>
+        {loading
+          ? t("laboratory.confirmLabLoading", "Saving…")
+          : t("laboratory.confirmLabBtn", "Confirm laboratory")}
+      </Button>
+    </form>
+  );
 }
 
 export function PatientRetryLabOrderForm({ orderId }) {
-  const { loading, handleSubmit, error } = useLabSubmit(retryRejectedLabOrder, "Choose another laboratory to continue");
-  return <form onSubmit={handleSubmit}><input type="hidden" name="labOrderId" value={orderId} /><ActionError error={error} /><Button type="submit" size="sm" variant="outline" disabled={loading}>{loading ? "Reopening…" : "Choose another laboratory"}</Button></form>;
+  const { t } = useLanguage();
+  const { loading, handleSubmit, error } = useLabSubmit(
+    retryRejectedLabOrder,
+    t("laboratory.retrySuccess", "Choose another laboratory to continue")
+  );
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="hidden" name="labOrderId" value={orderId} />
+      <ActionError error={error} />
+      <Button type="submit" size="sm" variant="outline" disabled={loading}>
+        {loading
+          ? t("laboratory.chooseAnotherLabLoading", "Reopening…")
+          : t("laboratory.chooseAnotherLabBtn", "Choose another laboratory")}
+      </Button>
+    </form>
+  );
 }
 
 export function LaboratoryOfferingForm({ laboratoryId, tests }) {

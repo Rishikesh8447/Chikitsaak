@@ -3,6 +3,7 @@
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/actions/onboarding";
 import { createAppointmentNotificationPair } from "@/lib/notifications";
 import { canTransitionAppointment } from "@/lib/appointment-lifecycle.mjs";
 import { cancelAppointmentInTransaction, CANCELLATION_ERRORS } from "@/lib/appointment-cancellation.mjs";
@@ -408,25 +409,17 @@ export async function updateAvailabilitySlot(formData) {
  * Get doctor's current availability slots
  */
 export async function getDoctorAvailability() {
-  const { userId } = await auth();
+  const doctor = await getCurrentUser();
 
-  if (!userId) {
+  if (!doctor) {
     return { success: false, slots: [], error: "Unauthorized" };
   }
 
+  if (doctor.role !== "DOCTOR" || doctor.verificationStatus !== "VERIFIED") {
+    return { success: false, slots: [], error: "Doctor not found" };
+  }
+
   try {
-    const doctor = await db.user.findUnique({
-      where: {
-        clerkUserId: userId,
-        role: "DOCTOR",
-        verificationStatus: "VERIFIED",
-      },
-    });
-
-    if (!doctor) {
-      return { success: false, slots: [], error: "Doctor not found" };
-    }
-
     const availabilitySlots = await db.availability.findMany({
       where: {
         doctorId: doctor.id,
@@ -448,25 +441,17 @@ export async function getDoctorAvailability() {
  */
 
 export async function getDoctorAppointments() {
-  const { userId } = await auth();
+  const doctor = await getCurrentUser();
 
-  if (!userId) {
+  if (!doctor) {
     throw new Error("Unauthorized");
   }
 
+  if (doctor.role !== "DOCTOR" || doctor.verificationStatus !== "VERIFIED") {
+    throw new Error("Doctor not found");
+  }
+
   try {
-    const doctor = await db.user.findUnique({
-      where: {
-        clerkUserId: userId,
-        role: "DOCTOR",
-        verificationStatus: "VERIFIED",
-      },
-    });
-
-    if (!doctor) {
-      throw new Error("Doctor not found");
-    }
-
     const appointments = await db.appointment.findMany({
       where: {
         doctorId: doctor.id,

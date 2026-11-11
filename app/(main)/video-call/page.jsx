@@ -1,7 +1,4 @@
-import Link from "next/link";
-import { AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import VideoCall from "./_components/video-call";
+import VideoCall, { VideoCallUnavailable } from "./_components/video-call";
 import { getVideoCallCredentials } from "@/actions/appointments";
 
 export default async function VideoCallPage({ searchParams }) {
@@ -22,24 +19,7 @@ export default async function VideoCallPage({ searchParams }) {
   }
 
   if (error || !credentials) {
-    return (
-      <main className="container mx-auto max-w-md px-4 py-16 text-center">
-        <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-          <div className="mx-auto size-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
-            <AlertCircle className="size-6" />
-          </div>
-          <h1 className="text-base font-bold text-foreground">Video Consultation Unavailable</h1>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {error || "Could not load video credentials."}
-          </p>
-          <div className="pt-2">
-            <Button asChild size="sm" className="bg-primary text-primary-foreground">
-              <Link href="/appointments">Return to Appointments</Link>
-            </Button>
-          </div>
-        </div>
-      </main>
-    );
+    return <VideoCallUnavailable error={error} />;
   }
 
   return (

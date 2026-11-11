@@ -52,6 +52,7 @@ async function loadActions({ callerRole = "ADMIN", targetRole = "DOCTOR", target
 
   const transformed = source
     .replaceAll('"use server";', "")
+    .replace('import { cache } from "react";', "const { cache = (fn) => fn } = dependencies;")
     .replaceAll("export async function", "async function")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")

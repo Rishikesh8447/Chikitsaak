@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pill, Search, MapPin, Phone, Building2, ShieldCheck, CheckCircle2, AlertCircle, ShoppingBag, FileText, Info, Send, Loader2 } from "lucide-react";
+import { Pill, Search, MapPin, Phone, Building2, CheckCircle2, ShoppingBag, Info, Send, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDateOnly } from "@/lib/pharmacy-workflow.mjs";
 import { submitPharmacyDispensingRequest } from "@/actions/pharmacy";
+import { useLanguage } from "@/components/language-provider";
 
 export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
   const router = useRouter();
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [selectedCity, setSelectedCity] = useState("ALL");
   const [selectedItems, setSelectedItems] = useState({});
@@ -83,13 +85,13 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
         if (patientNote.trim()) fd.set("patientNote", patientNote.trim());
         await submitPharmacyDispensingRequest(fd);
       }
-      toast.success("Dispensing request submitted to partner pharmacy!");
+      toast.success(t("pharmacy.submitRequestSuccess", "Dispensing request submitted to partner pharmacy!"));
       setSelectedItems({});
       setPatientNote("");
       setOrderSubmitted(false);
       router.refresh();
     } catch (err) {
-      setSubmitError(err?.message || "Failed to submit request. Please try again.");
+      setSubmitError(err?.message || t("pharmacy.genericSubmitError", "Failed to submit request. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -105,14 +107,14 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search medicines, generic names, or pharmacy..."
+            placeholder={t("pharmacy.searchPlaceholder", "Search medicines, generic names, or pharmacy...")}
             className="h-10 w-full rounded-xl border border-border bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
 
         {cities.length > 2 && (
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Location:</span>
+            <span className="text-muted-foreground">{t("pharmacy.locationLabel", "Location:")}</span>
             <select
               value={selectedCity}
               onChange={(e) => setSelectedCity(e.target.value)}
@@ -120,7 +122,7 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
             >
               {cities.map((city) => (
                 <option key={city} value={city}>
-                  {city === "ALL" ? "All Locations" : city}
+                  {city === "ALL" ? t("pharmacy.allLocations", "All Locations") : city}
                 </option>
               ))}
             </select>
@@ -138,10 +140,13 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {selectedCount} item{selectedCount > 1 ? "s" : ""} selected
+                  {selectedCount > 1
+                    ? t("pharmacy.itemsSelectedPlural", "{count} items selected", { count: selectedCount })
+                    : t("pharmacy.itemsSelected", "{count} item selected", { count: selectedCount })}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Estimated subtotal: <span className="font-semibold text-primary">₹{selectedTotal.toFixed(2)}</span>
+                  {t("pharmacy.estimatedSubtotal", "Estimated subtotal:")}{" "}
+                  <span className="font-semibold text-primary">₹{selectedTotal.toFixed(2)}</span>
                 </p>
               </div>
             </div>
@@ -153,7 +158,7 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                 className="gap-1.5 text-xs font-medium"
               >
                 <CheckCircle2 className="size-3.5" />
-                Review & Request Dispensing
+                {t("pharmacy.reviewAndRequestBtn", "Review & Request Dispensing")}
               </Button>
               <Button
                 size="sm"
@@ -164,7 +169,7 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                 }}
                 className="text-xs text-muted-foreground"
               >
-                Clear
+                {t("pharmacy.clearBtn", "Clear")}
               </Button>
             </div>
           </div>
@@ -174,27 +179,29 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
             <div className="mt-4 rounded-lg border border-border bg-card p-4 space-y-3">
               <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                 <Info className="size-4 text-primary" />
-                <span>Pharmacy Fulfillment & Prescription Verification</span>
+                <span>{t("pharmacy.modalTitle", "Pharmacy Fulfillment & Prescription Verification")}</span>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Medicines are dispensed by verified, licensed partner pharmacies. In accordance with clinical standards, schedule H/X prescription drugs require an active doctor consultation record.
+                {t("pharmacy.modalDesc", "Medicines are dispensed by verified, licensed partner pharmacies. In accordance with clinical standards, schedule H/X prescription drugs require an active doctor consultation record.")}
               </p>
 
               <div className="space-y-1.5 pt-1">
                 <label className="text-xs font-medium text-foreground">
-                  Patient notes or delivery / pickup instructions:
+                  {t("pharmacy.patientNotesLabel", "Patient notes or delivery / pickup instructions:")}
                 </label>
                 <textarea
                   rows={2}
                   value={patientNote}
                   onChange={(e) => setPatientNote(e.target.value)}
-                  placeholder="Specify pickup preference, preferred pharmacy branch, or urgent refill request..."
+                  placeholder={t("pharmacy.patientNotesPlaceholder", "Specify pickup preference, preferred pharmacy branch, or urgent refill request...")}
                   className="w-full rounded-md border border-border bg-background p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
-                <p className="font-medium text-foreground">Dispensing Pharmacy Contact:</p>
+                <p className="font-medium text-foreground">
+                  {t("pharmacy.contactHeader", "Dispensing Pharmacy Contact:")}
+                </p>
                 {Object.keys(selectedItems).map((id) => {
                   const item = products.find((p) => p.id === id);
                   if (!item) return null;
@@ -205,11 +212,11 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                         <span>{item.name} × {selectedItems[id]}</span>
                         {isPrescribed && (
                           <Badge variant="outline" className="text-[9px] h-4 px-1 text-emerald-600 border-emerald-500/30">
-                            Prescription Matched
+                            {t("pharmacy.prescriptionMatchedBadge", "Prescription Matched")}
                           </Badge>
                         )}
                       </div>
-                      <span>{item.pharmacy?.name} ({item.pharmacy?.contactPhone || "Store visit"})</span>
+                      <span>{item.pharmacy?.name} ({item.pharmacy?.contactPhone || t("pharmacy.storeVisitFallback", "Store visit")})</span>
                     </div>
                   );
                 })}
@@ -232,12 +239,12 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                     {submitting ? (
                       <>
                         <Loader2 className="size-3.5 animate-spin" />
-                        Submitting...
+                        {t("pharmacy.submitRequestLoading", "Submitting...")}
                       </>
                     ) : (
                       <>
                         <Send className="size-3.5" />
-                        Confirm & Send Dispensing Request
+                        {t("pharmacy.submitRequestBtn", "Confirm & Send Dispensing Request")}
                       </>
                     )}
                   </Button>
@@ -248,11 +255,11 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                     disabled={submitting}
                     className="text-xs text-muted-foreground"
                   >
-                    Cancel
+                    {t("pharmacy.cancelModalBtn", "Cancel")}
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Your dispensing request will be sent to the verified store for confirmation.
+                  {t("pharmacy.modalDisclaimer", "Your dispensing request will be sent to the verified store for confirmation.")}
                 </p>
               </div>
             </div>
@@ -277,11 +284,11 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                     {isPrescribed ? (
                       <Badge variant="default" className="text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-600 text-white">
                         <CheckCircle2 className="size-3" />
-                        In Your Prescription
+                        {t("pharmacy.inPrescriptionBadge", "In Your Prescription")}
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-[10px]">
-                        {product.isAvailable ? "In Stock" : "Check Store"}
+                        {product.isAvailable ? t("pharmacy.inStock", "In Stock") : t("pharmacy.checkStore", "Check Store")}
                       </Badge>
                     )}
                   </div>
@@ -299,9 +306,13 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                   <div className="flex items-baseline justify-between border-t border-border/60 pt-3">
                     <div>
                       <span className="text-base font-bold text-foreground">₹{product.price}</span>
-                      <span className="text-[10px] text-muted-foreground ml-1">incl. taxes</span>
+                      <span className="text-[10px] text-muted-foreground ml-1">
+                        {t("pharmacy.inclTaxes", "incl. taxes")}
+                      </span>
                       {product.expiryDate && (
-                        <p className="text-[10px] text-muted-foreground">Expires: {formatDateOnly(product.expiryDate)}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {t("pharmacy.expiresOn", "Expires: {date}", { date: formatDateOnly(product.expiryDate) })}
+                        </p>
                       )}
                     </div>
                     {product.pharmacy?.city && (
@@ -340,11 +351,13 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
                         onClick={() => handleQuantityChange(product.id, 1)}
                         className="w-full text-xs font-medium"
                       >
-                        Select medicine
+                        {t("pharmacy.selectMedicineBtn", "Select medicine")}
                       </Button>
                     ) : (
                       <div className="flex w-full items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-2 py-1">
-                        <span className="text-xs font-medium text-primary">Selected:</span>
+                        <span className="text-xs font-medium text-primary">
+                          {t("pharmacy.selectedLabel", "Selected:")}
+                        </span>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleQuantityChange(product.id, -1)}
@@ -373,9 +386,11 @@ export function PatientPharmacyCatalog({ products = [], prescriptions = [] }) {
           <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Pill className="size-6" />
           </div>
-          <h3 className="mt-3 text-base font-semibold text-foreground">No products found</h3>
+          <h3 className="mt-3 text-base font-semibold text-foreground">
+            {t("pharmacy.noProductsFoundTitle", "No products found")}
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Try adjusting your search terms or location filter.
+            {t("pharmacy.noProductsFoundSubtitle", "Try adjusting your search terms or location filter.")}
           </p>
         </div>
       )}

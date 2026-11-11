@@ -28,8 +28,10 @@ import { doctorFormSchema } from "@/lib/schema";
 import { SPECIALTIES } from "@/lib/specialities";
 import useFetch from "@/hooks/use-fetch";
 import { useEffect } from "react";
+import { useLanguage } from "@/components/language-provider";
 
 export default function OnboardingPage() {
+  const { t } = useLanguage();
   const [step, setStep] = useState("choose-role");
   const router = useRouter();
 
@@ -102,11 +104,10 @@ export default function OnboardingPage() {
               <User className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="mb-2 min-w-0 max-w-full break-words text-xl font-semibold text-foreground">
-              Join as a Patient
+              {t("onboarding.joinPatientTitle", "Join as a Patient")}
             </CardTitle>
             <CardDescription className="mb-4 min-w-0 max-w-full flex-1 break-words">
-              Book appointments, consult with doctors, and manage your
-              healthcare journey
+              {t("onboarding.joinPatientDesc", "Book appointments, consult with doctors, and manage your healthcare journey")}
             </CardDescription>
             <Button
               type="button"
@@ -117,10 +118,10 @@ export default function OnboardingPage() {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
+                  {t("onboarding.processing", "Processing...")}
                 </>
               ) : (
-                "Continue as Patient"
+                t("onboarding.continuePatient", "Continue as Patient")
               )}
             </Button>
           </CardContent>
@@ -131,11 +132,10 @@ export default function OnboardingPage() {
               <Stethoscope className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="mb-2 min-w-0 max-w-full break-words text-xl font-semibold text-foreground">
-              Join as a Doctor
+              {t("onboarding.joinDoctorTitle", "Join as a Doctor")}
             </CardTitle>
             <CardDescription className="mb-4 min-w-0 max-w-full flex-1 break-words">
-              Create your professional profile, set your availability, and
-              provide consultations
+              {t("onboarding.joinDoctorDesc", "Create your professional profile, set your availability, and provide consultations")}
             </CardDescription>
             <Button
               type="button"
@@ -143,7 +143,7 @@ export default function OnboardingPage() {
               disabled={loading}
               onClick={() => setStep("doctor-form")}
             >
-              Continue as Doctor
+              {t("onboarding.continueDoctor", "Continue as Doctor")}
             </Button>
           </CardContent>
         </Card>
@@ -153,13 +153,13 @@ export default function OnboardingPage() {
               <FlaskConical className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="mb-2 min-w-0 max-w-full break-words text-xl font-semibold text-foreground">
-              Laboratory Partner
+              {t("onboarding.labPartnerTitle", "Laboratory Partner")}
             </CardTitle>
             <CardDescription className="mb-4 min-w-0 max-w-full flex-1 break-words">
-              Apply for an organization workspace. Admin approval is required before partner operations are enabled.
+              {t("onboarding.labPartnerDesc", "Apply for an organization workspace. Admin approval is required before partner operations are enabled.")}
             </CardDescription>
             <Link href="/laboratory/workspace" className={buttonVariants({ className: "mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary/90" })}>
-              Laboratory onboarding
+              {t("onboarding.labOnboardingBtn", "Laboratory onboarding")}
             </Link>
           </CardContent>
         </Card>
@@ -169,13 +169,13 @@ export default function OnboardingPage() {
               <Pill className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="mb-2 min-w-0 max-w-full break-words text-xl font-semibold text-foreground">
-              Pharmacy Partner
+              {t("onboarding.pharmacyPartnerTitle", "Pharmacy Partner")}
             </CardTitle>
             <CardDescription className="mb-4 min-w-0 max-w-full flex-1 break-words">
-              Apply for an organization workspace. Admin approval is required before partner operations are enabled.
+              {t("onboarding.pharmacyPartnerDesc", "Apply for an organization workspace. Admin approval is required before partner operations are enabled.")}
             </CardDescription>
             <Link href="/pharmacy/workspace" className={buttonVariants({ className: "mt-auto h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-3 py-2 text-center leading-snug bg-primary hover:bg-primary/90" })}>
-              Chemist / Pharmacy onboarding
+              {t("onboarding.pharmacyOnboardingBtn", "Chemist / Pharmacy onboarding")}
             </Link>
           </CardContent>
         </Card>

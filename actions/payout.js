@@ -3,6 +3,7 @@
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/actions/onboarding";
 import { eligiblePaymentWhere, releasePaymentPayoutAllocations, reservePaymentCollections, sumAllocationPaise } from "@/lib/payment-payouts.mjs";
 import { withSerializableRetries } from "@/lib/appointment-payment-reconciliation.mjs";
 import { measureServerTiming } from "@/lib/server-timing.mjs";
@@ -99,25 +100,17 @@ export async function cancelPaymentPayoutRequest(payoutId) {
  * Get doctor's payout history
  */
 export async function getDoctorPayouts() {
-  const { userId } = await auth();
+  const doctor = await getCurrentUser();
 
-  if (!userId) {
+  if (!doctor) {
     throw new Error("Unauthorized");
   }
 
+  if (doctor.role !== "DOCTOR" || doctor.verificationStatus !== "VERIFIED") {
+    throw new Error("Doctor not found");
+  }
+
   try {
-    const doctor = await db.user.findFirst({
-      where: {
-        clerkUserId: userId,
-        role: "DOCTOR",
-        verificationStatus: "VERIFIED",
-      },
-    });
-
-    if (!doctor) {
-      throw new Error("Doctor not found");
-    }
-
     const payouts = await db.payout.findMany({
       where: {
         doctorId: doctor.id,
@@ -137,25 +130,17 @@ export async function getDoctorPayouts() {
  * Get doctor's earnings summary
  */
 export async function getDoctorEarnings() {
-  const { userId } = await measureServerTiming("doctorEarnings.auth", () => auth());
+  const doctor = await getCurrentUser();
 
-  if (!userId) {
+  if (!doctor) {
     throw new Error("Unauthorized");
   }
 
-  try {
-    const doctor = await measureServerTiming("doctorEarnings.doctorLookup", () => db.user.findFirst({
-      where: {
-        clerkUserId: userId,
-        role: "DOCTOR",
-        verificationStatus: "VERIFIED",
-      },
-      select: { id: true },
-    }));
+  if (doctor.role !== "DOCTOR" || doctor.verificationStatus !== "VERIFIED") {
+    throw new Error("Doctor not found");
+  }
 
-    if (!doctor) {
-      throw new Error("Doctor not found");
-    }
+  try {
 
     // Get all completed appointments, eligible payments, and active allocations for this doctor
     const [completedAppointments, payments, allocations] = await Promise.all([

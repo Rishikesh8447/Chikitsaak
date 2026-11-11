@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 import { db } from "@/lib/prisma";
 import { verifyAdmin } from "@/actions/admin";
 import { canManagePharmacy, canTransitionPharmacy, normalizeLicenseKey, validateProductDates, isProductExpired, parseDateOnly, formatDateOnly, serializePharmacyProduct } from "@/lib/pharmacy-workflow.mjs";
@@ -288,6 +288,7 @@ export async function savePharmacyProduct(formData) {
       await audit(tx, { actorUserId: user.id, pharmacyId, entityId: product.id, action: "PRODUCT_CREATED" });
     }
   }, transactionOptions);
+  updateTag("pharmacy-catalog");
   revalidatePath("/pharmacy/workspace");
   revalidatePath("/pharmacy");
   return { success: true };
@@ -309,6 +310,7 @@ export async function deletePharmacyProduct(formData) {
     await audit(tx, { actorUserId: user.id, pharmacyId, entityId: productId, action: "PRODUCT_DELETED" });
   }, transactionOptions);
 
+  updateTag("pharmacy-catalog");
   revalidatePath("/pharmacy/workspace");
   revalidatePath("/pharmacy");
   return { success: true };
@@ -339,7 +341,9 @@ export async function setPharmacyProductAvailability(formData) {
     if (changed.count !== 1) throw new Error("Product does not belong to this pharmacy");
     await audit(tx, { actorUserId: user.id, pharmacyId, entityId: productId, action: available ? "PRODUCT_ENABLED" : "PRODUCT_DISABLED" });
   }, transactionOptions);
+  updateTag("pharmacy-catalog");
   revalidatePath("/pharmacy/workspace");
+  revalidatePath("/pharmacy");
   return { success: true };
 }
 
@@ -365,45 +369,58 @@ export async function updatePharmacyStatus(formData) {
     if (changed.count !== 1) throw new Error("Pharmacy status was updated by another administrator");
     await audit(tx, { actorUserId: admin.id, pharmacyId, entityId: pharmacyId, action: `PHARMACY_${status}`, fromStatus: pharmacy.status, toStatus: status, reason });
   }, transactionOptions);
+  updateTag("pharmacy-catalog");
   revalidatePath("/admin");
   revalidatePath("/admin/pharmacy");
   revalidatePath("/pharmacy/workspace");
+  revalidatePath("/pharmacy");
   return { success: true };
 }
 
-export async function getAvailablePharmacyProducts() {
-  const products = await db.pharmacyProduct.findMany({
-    where: {
-      isAvailable: true,
-      pharmacy: { status: "VERIFIED" },
-    },
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      price: true,
-      isAvailable: true,
-      pharmacy: {
-        select: {
-          id: true,
-          name: true,
-          address: true,
-          city: true,
-          state: true,
-          contactPhone: true,
-          contactEmail: true,
+const getCachedAvailablePharmacyProducts = unstable_cache(
+  async () => {
+    const products = await db.pharmacyProduct.findMany({
+      where: {
+        isAvailable: true,
+        pharmacy: { status: "VERIFIED" },
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        isAvailable: true,
+        pharmacy: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            city: true,
+            state: true,
+            contactPhone: true,
+            contactEmail: true,
+          },
         },
       },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+    });
 
-  return {
-    products: products.map((product) => ({
-      ...product,
-      price: Number(product.price).toFixed(2),
-    })),
-  };
+    return {
+      products: products.map((product) => ({
+        ...product,
+        price: Number(product.price).toFixed(2),
+      })),
+    };
+  },
+  ["available-pharmacy-products"],
+  {
+    revalidate: 60,
+    tags: ["pharmacy-catalog"],
+  }
+);
+
+export async function getAvailablePharmacyProducts() {
+  return getCachedAvailablePharmacyProducts();
 }
 
 export async function submitPharmacyDispensingRequest(formData) {

@@ -25,6 +25,7 @@ async function loadAction({ role, authenticated = true, updateCount = 1 }) {
   const revalidatePath = (path) => state.revalidated.push(path);
   const transformed = source
     .replaceAll('"use server"', "")
+    .replace('import { cache } from "react";', "const { cache = (fn) => fn } = dependencies;")
     .replace('import { revalidatePath } from "next/cache";', "const { revalidatePath } = dependencies;")
     .replace('import { db } from "@/lib/prisma";', "const { db } = dependencies;")
     .replace('import { auth } from "@clerk/nextjs/server";', "const { auth } = dependencies;")

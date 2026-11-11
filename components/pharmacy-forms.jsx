@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { addPharmacyMember, deletePharmacyProduct, savePharmacyProduct, setPharmacyProductAvailability, submitPharmacyApplication, updatePharmacyMember, updatePharmacyStatus, updatePharmacyDispensingRequestStatus, cancelPatientDispensingRequest } from "@/actions/pharmacy";
 import { formatDateOnly, isProductExpired } from "@/lib/pharmacy-workflow.mjs";
 import { DatePicker } from "@/components/ui/date-picker";
+import { useLanguage } from "@/components/language-provider";
 
 function useSubmit(action, successMessage) {
   const router = useRouter();
@@ -420,7 +421,11 @@ export function PharmacyRequestActionForm({ pharmacyId, request }) {
 }
 
 export function PatientCancelRequestButton({ requestId }) {
-  const { loading, fn, error } = useSubmit(cancelPatientDispensingRequest, "Dispensing request cancelled");
+  const { t } = useLanguage();
+  const { loading, fn, error } = useSubmit(
+    cancelPatientDispensingRequest,
+    t("pharmacy.cancelRequestSuccess", "Dispensing request cancelled")
+  );
 
   return (
     <div className="inline-flex items-center gap-2">
@@ -433,7 +438,9 @@ export function PatientCancelRequestButton({ requestId }) {
           disabled={loading}
           className="text-xs text-destructive hover:bg-destructive/10 h-7 px-2.5"
         >
-          {loading ? "Cancelling…" : "Cancel Request"}
+          {loading
+            ? t("pharmacy.cancelRequestLoading", "Cancelling…")
+            : t("pharmacy.cancelRequestBtn", "Cancel Request")}
         </Button>
       </form>
       <ErrorText error={error} />

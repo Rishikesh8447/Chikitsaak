@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
 import { measureServerTiming } from "@/lib/server-timing.mjs";
+import { getCurrentUser } from "@/actions/onboarding";
 
 const ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const RANGES = new Set([7, 30, 90, 365]);
@@ -40,12 +41,8 @@ function statusCounts(records) {
 }
 
 async function currentUser() {
-  const { userId } = await measureServerTiming("analytics.auth", () => auth());
-  if (!userId) throw new Error("Unauthorized");
-  const user = await measureServerTiming("analytics.userLookup", () =>
-    db.user.findUnique({ where: { clerkUserId: userId }, select: { id: true, role: true, verificationStatus: true } })
-  );
-  if (!user) throw new Error("User not found");
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
   return user;
 }
 

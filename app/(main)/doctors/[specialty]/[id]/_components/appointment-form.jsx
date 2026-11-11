@@ -39,7 +39,7 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
 
     const selectedPaymentMethod = consultationMode === "ONLINE" ? "ONLINE" : offlinePaymentMethod;
     if (selectedPaymentMethod === "UPI_QR" && !razorpayReady) {
-      toast.error("Secure checkout is still loading. Please try again shortly.");
+      toast.error(t("appointmentForm.checkoutLoadingRetry", "Secure checkout is still loading. Please try again shortly."));
       return;
     }
     setLoading(true);
@@ -48,10 +48,10 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
       if (selectedPaymentMethod === "CASH") {
         const result = await createOfflineAppointmentCheckout(formData, "CASH");
         if (!result?.success) {
-          toast.error(result?.message || "Unable to book this appointment.");
+          toast.error(result?.message || t("appointmentForm.unableToBook", "Unable to book this appointment."));
           return;
         }
-        toast.success("Appointment booked. Cash payment is due at the consultation.");
+        toast.success(t("appointmentForm.bookedCashDue", "Appointment booked. Cash payment is due at the consultation."));
         onComplete();
         return;
       }
@@ -61,13 +61,13 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
           : await createOfflineAppointmentCheckout(formData, "UPI_QR");
         if (!checkout?.success) {
           setActiveCheckout(null);
-          toast.error(checkout?.message || "Unable to start checkout.");
+          toast.error(checkout?.message || t("appointmentForm.unableToStartCheckout", "Unable to start checkout."));
           return;
         }
         setActiveCheckout(checkout);
       }
       if (typeof window.Razorpay !== "function") {
-        toast.error("Secure checkout is still loading. Please try again.");
+        toast.error(t("appointmentForm.checkoutLoadingRetryShort", "Secure checkout is still loading. Please try again."));
         return;
       }
       const razorpay = new window.Razorpay({
@@ -76,7 +76,9 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
         amount: checkout.amount,
         currency: checkout.currency,
         name: "Chikitsaak",
-        description: consultationMode === "OFFLINE" ? "In-person doctor consultation" : "Online doctor consultation",
+        description: consultationMode === "OFFLINE"
+          ? t("appointmentForm.inPersonConsultationDesc", "In-person doctor consultation")
+          : t("appointmentForm.onlineConsultationDesc", "Online doctor consultation"),
         theme: { color: "#0f766e" },
         ...(selectedPaymentMethod === "UPI_QR" ? {
           config: {
@@ -97,21 +99,21 @@ export function AppointmentForm({ doctorId, slot, priceRupees, onBack, onComplet
           });
           if (result?.success) {
             setActiveCheckout(null);
-            toast.success("Payment verified and appointment request booked.");
+            toast.success(t("appointmentForm.paymentVerifiedBooked", "Payment verified and appointment request booked."));
             onComplete();
           } else {
             if (["REFUND_REVIEW_REQUIRED", "PAYMENT_RECONCILIATION_PENDING"].includes(result?.code)) {
               setActiveCheckout(null);
               onComplete();
             }
-            toast.error(result?.message || "Payment could not be verified.");
+            toast.error(result?.message || t("appointmentForm.paymentNotVerified", "Payment could not be verified."));
           }
         },
       });
-      razorpay.on("payment.failed", () => toast.error("Payment was not completed. Your slot hold will expire in 15 minutes."));
+      razorpay.on("payment.failed", () => toast.error(t("appointmentForm.paymentFailedExpiry", "Payment was not completed. Your slot hold will expire in 15 minutes.")));
       razorpay.open();
     } catch {
-      toast.error("Unable to start secure checkout. Please try again.");
+      toast.error(t("appointmentForm.unableToStartRetry", "Unable to start secure checkout. Please try again."));
     } finally {
       setLoading(false);
     }

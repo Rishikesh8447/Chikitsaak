@@ -18,6 +18,7 @@ const BOOKING_STATUSES = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"];
 const VIDEO_STATUSES = ["CONFIRMED", "IN_PROGRESS"];
 const VIDEO_ENVIRONMENT_VARIABLES = ["NEXT_PUBLIC_VONAGE_APPLICATION_ID", "VONAGE_PRIVATE_KEY"];
 const videoSessionProvisioning = new Map();
+const SERVER_VERIFIED_TAG = Symbol.for("chikitsaak.verifiedDoctor");
 
 function logVideoProvisioningFailure(operation, error) {
   const missingVariables = VIDEO_ENVIRONMENT_VARIABLES.filter((name) => error?.missingVariables?.includes(name));
@@ -262,6 +263,11 @@ export async function getDoctorById(doctorId) {
     if (!doctor) return { doctor: null };
 
     const [resolvedDoctor] = await measureServerTiming("doctorProfile.clerkNameResolution", () => resolveDoctorPublicNames([doctor]));
+    if (resolvedDoctor) {
+      resolvedDoctor.role = "DOCTOR";
+      resolvedDoctor.verificationStatus = "VERIFIED";
+      resolvedDoctor[SERVER_VERIFIED_TAG] = true;
+    }
     return { doctor: resolvedDoctor };
   } catch (error) {
     console.error("Failed to fetch doctor:", error);
@@ -272,10 +278,21 @@ export async function getDoctorById(doctorId) {
 /**
  * Get available time slots for booking for the next 4 days
  */
-export async function getAvailableTimeSlots(doctorId, startDate) {
-  const doctor = await measureServerTiming("doctorProfile.availabilityDoctorLookup", () =>
-    db.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" } })
+export async function getAvailableTimeSlots(doctorId, startDate, preVerifiedDoctor) {
+  const isPreVerified = Boolean(
+    preVerifiedDoctor &&
+    typeof preVerifiedDoctor === "object" &&
+    preVerifiedDoctor[SERVER_VERIFIED_TAG] === true &&
+    preVerifiedDoctor.id === doctorId &&
+    preVerifiedDoctor.role === "DOCTOR" &&
+    preVerifiedDoctor.verificationStatus === "VERIFIED"
   );
+
+  const doctor = isPreVerified
+    ? preVerifiedDoctor
+    : await measureServerTiming("doctorProfile.availabilityDoctorLookup", () =>
+        db.user.findUnique({ where: { id: doctorId, role: "DOCTOR", verificationStatus: "VERIFIED" } })
+      );
   if (!doctor) throw new Error("Doctor not found or not verified");
   const now = new Date();
   const firstDay = startDate ? new Date(startDate) : now;

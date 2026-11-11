@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import Script from "next/script";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +54,7 @@ import {
   getDoctorSupportedModes,
 } from "@/lib/follow-up-appointment.mjs";
 import { useLanguage } from "@/components/language-provider";
+import { loadRazorpayScript } from "@/lib/razorpay-script";
 
 export function AppointmentCard({
   appointment,
@@ -64,6 +64,13 @@ export function AppointmentCard({
 }) {
   const { t, locale, isStaff } = useLanguage();
   const isPatient = userRole === "PATIENT" && !isStaff;
+  const isFollowUpAppointment = Boolean(appointment.originalAppointmentId);
+  const needsRazorpayCheckout =
+    userRole === "PATIENT" &&
+    !isFollowUpAppointment &&
+    appointment.status === "PAYMENT_PENDING" &&
+    appointment.payment?.status === "PENDING" &&
+    ["ONLINE", "UPI_QR"].includes(appointment.payment.method);
   const [open, setOpen] = useState(Boolean(initialOpen));
   const [action, setAction] = useState(null); // 'cancel', 'notes', 'video', or 'complete'
   const [notes, setNotes] = useState(appointment.notes || "");
@@ -79,6 +86,19 @@ export function AppointmentCard({
   const [resumeStatusMessage, setResumeStatusMessage] = useState(null);
   const handledStatusResult = useRef(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (!needsRazorpayCheckout) return;
+    let active = true;
+    loadRazorpayScript().then((ready) => {
+      if (active && ready) {
+        setRazorpayReady(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [needsRazorpayCheckout]);
 
   // UseFetch hooks for server actions
   const {
@@ -174,11 +194,15 @@ export function AppointmentCard({
       const startTime = new Date(appointment.startTime);
       const endTime = new Date(appointment.endTime);
       if (now < startTime) {
-        toast.error(`Consultation can only start during the scheduled appointment time (starts at ${formatTime(appointment.startTime)})`);
+        toast.error(
+          isPatient
+            ? t("appointmentCard.consultationStartTime", "Consultation can only start during the scheduled appointment time (starts at {time})", { time: formatTime(appointment.startTime) })
+            : `Consultation can only start during the scheduled appointment time (starts at ${formatTime(appointment.startTime)})`
+        );
         return;
       }
       if (now >= endTime) {
-        toast.error("This appointment has already ended");
+        toast.error(isPatient ? t("appointmentCard.appointmentEnded", "This appointment has already ended") : "This appointment has already ended");
         return;
       }
     }
@@ -211,9 +235,9 @@ export function AppointmentCard({
       const checkout = await resumePendingAppointmentCheckout(appointment.id);
       if (!checkout?.success) {
         if (["PAYMENT_PROCESSING", "REFUND_REVIEW_REQUIRED", "CHECKOUT_NOT_RESUMABLE"].includes(checkout?.code)) {
-          setResumeStatusMessage(checkout.message || "This checkout cannot be resumed safely.");
+          setResumeStatusMessage(checkout.message || (isPatient ? t("appointmentCard.checkoutCannotResume", "This checkout cannot be resumed safely.") : "This checkout cannot be resumed safely."));
         }
-        toast.error(checkout?.message || "This checkout cannot be resumed safely.");
+        toast.error(checkout?.message || (isPatient ? t("appointmentCard.checkoutCannotResume", "This checkout cannot be resumed safely.") : "This checkout cannot be resumed safely."));
         router.refresh();
         setResumeCheckoutLoading(false);
         return;
@@ -224,7 +248,9 @@ export function AppointmentCard({
         amount: checkout.amount,
         currency: checkout.currency,
         name: "Chikitsaak",
-        description: checkout.method === "UPI_QR" ? "In-person doctor consultation" : "Online doctor consultation",
+        description: checkout.method === "UPI_QR"
+          ? (isPatient ? t("appointmentForm.inPersonConsultationDesc", "In-person doctor consultation") : "In-person doctor consultation")
+          : (isPatient ? t("appointmentForm.onlineConsultationDesc", "Online doctor consultation") : "Online doctor consultation"),
         theme: { color: "#0f766e" },
         ...(checkout.method === "UPI_QR" ? {
           config: {
@@ -244,15 +270,18 @@ export function AppointmentCard({
               paymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
             });
-            if (result?.success) toast.success("Payment verified and appointment request booked.");
-            else {
+            if (result?.success) {
+              toast.success(isPatient ? t("appointmentCard.paymentVerified", "Payment verified and appointment request booked.") : "Payment verified and appointment request booked.");
+            } else {
               if (["REFUND_REVIEW_REQUIRED", "PAYMENT_RECONCILIATION_PENDING"].includes(result?.code)) {
                 setResumeStatusMessage(result.message);
               }
-              toast.error(result?.message || "Payment confirmation is pending. Do not pay again.");
+              toast.error(result?.message || (isPatient ? t("appointmentCard.paymentPendingNotice", "Payment confirmation is pending. Do not pay again.") : "Payment confirmation is pending. Do not pay again."));
             }
           } catch {
-            const message = "Payment was submitted, but confirmation is pending. Do not pay again.";
+            const message = isPatient
+              ? t("appointmentCard.paymentPendingMessage", "Payment was submitted, but confirmation is pending. Do not pay again.")
+              : "Payment was submitted, but confirmation is pending. Do not pay again.";
             setResumeStatusMessage(message);
             toast.error(message);
           } finally {
@@ -262,12 +291,12 @@ export function AppointmentCard({
         },
       });
       razorpay.on("payment.failed", () => {
-        toast.error("Payment was not completed. You can retry while the checkout hold is active.");
+        toast.error(isPatient ? t("appointmentCard.paymentFailedHold", "Payment was not completed. You can retry while the checkout hold is active.") : "Payment was not completed. You can retry while the checkout hold is active.");
         setResumeCheckoutLoading(false);
       });
       razorpay.open();
     } catch {
-      toast.error("Payment status could not be checked. Do not pay again; try again later.");
+      toast.error(isPatient ? t("appointmentCard.paymentStatusCheckFailed", "Payment status could not be checked. Do not pay again; try again later.") : "Payment status could not be checked. Do not pay again; try again later.");
       setResumeCheckoutLoading(false);
     }
   };
@@ -314,7 +343,7 @@ export function AppointmentCard({
     try {
       await submitFollowUp(formData);
     } catch (err) {
-      setFollowUpError(err?.message || "Failed to schedule follow-up appointment");
+      setFollowUpError(err?.message || (isPatient ? t("appointmentCard.failedFollowUp", "Failed to schedule follow-up appointment") : "Failed to schedule follow-up appointment"));
     }
   };
 
@@ -346,7 +375,7 @@ export function AppointmentCard({
   // Handle successful operations
   useEffect(() => {
     if (cancelData?.success) {
-      toast.success("Appointment cancelled successfully");
+      toast.success(isPatient ? t("appointmentCard.appointmentCancelled", "Appointment cancelled successfully") : "Appointment cancelled successfully");
       setOpen(false);
       if (refetchAppointments) {
         refetchAppointments();
@@ -354,7 +383,7 @@ export function AppointmentCard({
         router.refresh();
       }
     }
-  }, [cancelData, refetchAppointments, router]);
+  }, [cancelData, isPatient, refetchAppointments, router, t]);
 
   useEffect(() => {
     if (completeData?.success) {
@@ -408,29 +437,33 @@ export function AppointmentCard({
 
   useEffect(() => {
     if (rescheduleData?.success) {
-      toast.success("Appointment rescheduled successfully");
+      toast.success(isPatient ? t("appointmentCard.appointmentRescheduled", "Appointment rescheduled successfully") : "Appointment rescheduled successfully");
       setRescheduleOpen(false);
       setSelectedRescheduleSlot(null);
       if (refetchAppointments) refetchAppointments(); else router.refresh();
     }
-  }, [rescheduleData, refetchAppointments, router]);
+  }, [isPatient, refetchAppointments, rescheduleData, router, t]);
 
   useEffect(() => {
     if (followUpData?.success) {
-      toast.success("Follow-up appointment scheduled successfully (included at ₹0)");
+      if (isPatient) {
+        toast.success(t("appointmentCard.followUpScheduled", "Follow-up appointment scheduled successfully (included at ₹0)"));
+      } else {
+        toast.success("Follow-up appointment scheduled successfully (included at ₹0)");
+      }
       setFollowUpOpen(false);
       setSelectedFollowUpSlot(null);
       setFollowUpNotes("");
       setFollowUpError(null);
       if (refetchAppointments) refetchAppointments(); else router.refresh();
     }
-  }, [followUpData, refetchAppointments, router]);
+  }, [followUpData, isPatient, refetchAppointments, router, t]);
 
   useEffect(() => {
     if (followUpSubmitError) {
-      setFollowUpError(followUpSubmitError.message || "Failed to schedule follow-up appointment");
+      setFollowUpError(followUpSubmitError.message || (isPatient ? t("appointmentCard.failedFollowUp", "Failed to schedule follow-up appointment") : "Failed to schedule follow-up appointment"));
     }
-  }, [followUpSubmitError]);
+  }, [followUpSubmitError, isPatient, t]);
 
   // Determine if appointment is active (within 30 minutes of start time)
   const isAppointmentActive = () => {
@@ -453,7 +486,6 @@ export function AppointmentCard({
   const otherPartyLabel = userRole === "DOCTOR" ? "Patient" : isPatient ? t("appointmentCard.doctorLabel", "Doctor") : "Doctor";
   const otherPartyIcon = userRole === "DOCTOR" ? <User /> : <Stethoscope />;
 
-  const isFollowUpAppointment = Boolean(appointment.originalAppointmentId);
   const followUpEligibility = userRole === "PATIENT"
     ? isOriginalAppointmentEligibleForFollowUp(appointment)
     : { eligible: false };
@@ -475,11 +507,6 @@ export function AppointmentCard({
   return (
     <>
       <Card className="border-border transition-colors hover:border-primary/40 shadow-none">
-        {userRole === "PATIENT" && !isFollowUpAppointment && appointment.status === "PAYMENT_PENDING"
-          && appointment.payment?.status === "PENDING"
-          && ["ONLINE", "UPI_QR"].includes(appointment.payment.method) && (
-            <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" onReady={() => setRazorpayReady(true)} />
-          )}
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-col md:flex-row justify-between gap-4">
             <div className="flex items-start gap-3.5">

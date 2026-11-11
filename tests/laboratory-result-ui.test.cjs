@@ -4,7 +4,7 @@ const { readFile } = require("node:fs/promises");
 const { join } = require("node:path");
 const { cwd } = require("node:process");
 
-const patientPagePromise = readFile(join(cwd(), "app", "(main)", "laboratory", "page.jsx"), "utf8");
+const patientPagePromise = readFile(join(cwd(), "components", "patient-laboratory-view.jsx"), "utf8");
 const workspacePagePromise = readFile(join(cwd(), "app", "(main)", "laboratory", "workspace", "page.jsx"), "utf8");
 const actionsPromise = readFile(join(cwd(), "actions", "laboratory.js"), "utf8");
 const formsPromise = readFile(join(cwd(), "components", "laboratory-forms.jsx"), "utf8");
@@ -25,14 +25,14 @@ test("patient order history shows the total captured at booking once prices are 
   const [page, actions] = await Promise.all([patientPagePromise, actionsPromise]);
   assert.match(actions, /items: \{ select: \{[^}]*priceAtBooking/);
   assert.match(page, /getLabOrderBookingTotalCents\(order\.items\)/);
-  assert.match(page, /Total at booking: \{\(bookingTotalCents \/ 100\)\.toFixed\(2\)\}/);
+  assert.match(page, /Total at booking: .*?\(bookingTotalCents \/ 100\)\.toFixed\(2\)/);
 });
 
 test("patient must explicitly choose an eligible lab before confirming a doctor order", async () => {
   const forms = await formsPromise;
   const patientSelectionForm = forms.match(/export function PatientChooseLabForm\([\s\S]*?(?=\nexport function PatientRetryLabOrderForm)/)?.[0] || "";
   assert.match(patientSelectionForm, /useState\(""\)/);
-  assert.match(patientSelectionForm, /<option value="" disabled>Select an eligible laboratory<\/option>/);
+  assert.match(patientSelectionForm, /<option value="" disabled>[\s\S]*?Select an eligible laboratory[\s\S]*?<\/option>/);
   assert.match(patientSelectionForm, /disabled=\{loading \|\| !selected\}/);
 });
 

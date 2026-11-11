@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,8 +28,10 @@ import {
 } from "@/components/ui/dialog";
 import { markAppointmentCompleted } from "@/actions/doctor";
 import { toast } from "sonner";
+import { useLanguage } from "@/components/language-provider";
 
 export default function VideoCall({ appId: providedAppId, sessionId, token, appointmentId, userRole }) {
+  const { t, isStaff } = useLanguage();
   const [isLoading, setIsLoading] = useState(true);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -398,18 +401,20 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
           {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
             <div>
-              <h1 className="text-lg font-bold text-foreground">Video Consultation</h1>
+              <h1 className="text-lg font-bold text-foreground">
+                {isStaff ? "Video Consultation" : t("videoCall.title", "Video Consultation")}
+              </h1>
               <p className="text-muted-foreground text-xs">
-                Encrypted peer-to-peer session
+                {isStaff ? "Encrypted peer-to-peer session" : t("videoCall.subtitle", "Encrypted peer-to-peer session")}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className={isConnected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-muted text-muted-foreground"}>
-                {isConnected ? "Connected" : "Connecting…"}
+                {isConnected ? (isStaff ? "Connected" : t("videoCall.connected", "Connected")) : (isStaff ? "Connecting…" : t("videoCall.connecting", "Connecting…"))}
               </Badge>
               {hasOtherParticipant && (
                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                  Remote party present
+                  {isStaff ? "Remote party present" : t("videoCall.remotePresent", "Remote party present")}
                 </Badge>
               )}
             </div>
@@ -429,8 +434,12 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
           {isLoading && !connectionError && (
             <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center sm:min-h-[440px]">
               <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-              <p className="text-sm font-medium text-foreground">Joining consultation room…</p>
-              <p className="text-muted-foreground text-xs mt-1">Preparing secure media connection</p>
+              <p className="text-sm font-medium text-foreground">
+                {isStaff ? "Joining consultation room…" : t("videoCall.joiningRoom", "Joining consultation room…")}
+              </p>
+              <p className="text-muted-foreground text-xs mt-1">
+                {isStaff ? "Preparing secure media connection" : t("videoCall.preparingMedia", "Preparing secure media connection")}
+              </p>
             </div>
           )}
 
@@ -441,9 +450,11 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                 {/* Remote Participant Box */}
                 <div className="relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs">
                   <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium">
-                    <span>Remote Participant</span>
+                    <span>{isStaff ? "Remote Participant" : t("videoCall.remoteParticipant", "Remote Participant")}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {hasOtherParticipant ? "Connected" : "Waiting to join…"}
+                      {hasOtherParticipant
+                        ? (isStaff ? "Connected" : t("videoCall.connected", "Connected"))
+                        : (isStaff ? "Waiting to join…" : t("videoCall.waitingToJoin", "Waiting to join…"))}
                     </span>
                   </div>
                   <div
@@ -456,7 +467,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                           <User className="h-8 w-8" />
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Waiting for the other participant to join…
+                          {isStaff ? "Waiting for the other participant to join…" : t("videoCall.waitingOther", "Waiting for the other participant to join…")}
                         </p>
                       </div>
                     )}
@@ -466,9 +477,11 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                 {/* Local Participant (You) Box */}
                 <div className="relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs">
                   <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium">
-                    <span>You</span>
+                    <span>{isStaff ? "You" : t("videoCall.you", "You")}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {publisherReady ? "Live" : "Initializing…"}
+                      {publisherReady
+                        ? (isStaff ? "Live" : t("videoCall.live", "Live"))
+                        : (isStaff ? "Initializing…" : t("videoCall.initializing", "Initializing…"))}
                     </span>
                   </div>
                   <div
@@ -489,7 +502,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                           className="text-xs gap-1.5"
                         >
                           {isRetryingDevice ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                          Retry Camera Access
+                          {isStaff ? "Retry Camera Access" : t("videoCall.retryCamera", "Retry Camera Access")}
                         </Button>
                       </div>
                     )}
@@ -517,7 +530,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                       : "bg-red-500/10 border-red-500/30 text-destructive hover:bg-red-500/20"
                   }`}
                   disabled={!publisherReady}
-                  aria-label={isVideoEnabled ? "Turn camera off" : "Turn camera on"}
+                  aria-label={isVideoEnabled ? (isStaff ? "Turn camera off" : t("videoCall.turnCameraOff", "Turn camera off")) : (isStaff ? "Turn camera on" : t("videoCall.turnCameraOn", "Turn camera on"))}
                 >
                   {isVideoEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
                 </Button>
@@ -532,7 +545,7 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                       : "bg-red-500/10 border-red-500/30 text-destructive hover:bg-red-500/20"
                   }`}
                   disabled={!publisherReady}
-                  aria-label={isAudioEnabled ? "Mute microphone" : "Unmute microphone"}
+                  aria-label={isAudioEnabled ? (isStaff ? "Mute microphone" : t("videoCall.muteMic", "Mute microphone")) : (isStaff ? "Unmute microphone" : t("videoCall.unmuteMic", "Unmute microphone"))}
                 >
                   {isAudioEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
                 </Button>
@@ -543,22 +556,24 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
                   size="lg"
                   onClick={userRole === "DOCTOR" ? () => setEndModalOpen(true) : endCall}
                   className="rounded-full px-5 h-14 min-w-[3.5rem] bg-red-600 hover:bg-red-700 flex items-center justify-center gap-2 text-white font-medium shrink-0 shadow-md"
-                  aria-label={userRole === "DOCTOR" ? "Conclude consultation" : "End call"}
+                  aria-label={userRole === "DOCTOR" ? "Conclude consultation" : (isStaff ? "End call" : t("videoCall.endCall", "End Call"))}
                 >
                   <PhoneOff className="h-5 w-5 shrink-0" />
                   <span className="hidden sm:inline font-semibold">
-                    {userRole === "DOCTOR" ? "End / Complete" : "End Call"}
+                    {userRole === "DOCTOR" ? "End / Complete" : (isStaff ? "End Call" : t("videoCall.endCall", "End Call"))}
                   </span>
                 </Button>
               </div>
 
               <div className="text-center pb-2">
                 <p className="text-muted-foreground text-xs">
-                  {isVideoEnabled ? "Camera on" : "Camera off"} •
-                  {isAudioEnabled ? " Microphone on" : " Microphone off"}
+                  {isVideoEnabled ? (isStaff ? "Camera on" : t("videoCall.cameraOn", "Camera on")) : (isStaff ? "Camera off" : t("videoCall.cameraOff", "Camera off"))} •
+                  {isAudioEnabled ? (isStaff ? " Microphone on" : ` ${t("videoCall.micOn", "Microphone on")}`) : (isStaff ? " Microphone off" : ` ${t("videoCall.micOff", "Microphone off")}`)}
                 </p>
                 <p className="text-muted-foreground text-xs mt-0.5">
-                  When your consultation is finished, click {userRole === "DOCTOR" ? "End / Complete" : "End Call"} to return to your dashboard.
+                  {userRole === "DOCTOR"
+                    ? "When your consultation is finished, click End / Complete to return to your dashboard."
+                    : (isStaff ? "When your consultation is finished, click End Call to return to your dashboard." : t("videoCall.endCallHelp", "When your consultation is finished, click End Call to return to your dashboard."))}
                 </p>
               </div>
             </div>
@@ -624,5 +639,31 @@ export default function VideoCall({ appId: providedAppId, sessionId, token, appo
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export function VideoCallUnavailable({ error }) {
+  const { t, isStaff } = useLanguage();
+  return (
+    <main className="container mx-auto max-w-md px-4 py-16 text-center">
+      <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
+        <div className="mx-auto size-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
+          <AlertCircle className="size-6" />
+        </div>
+        <h1 className="text-base font-bold text-foreground">
+          {isStaff ? "Video Consultation Unavailable" : t("videoCall.unavailableTitle", "Video Consultation Unavailable")}
+        </h1>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {error || "Could not load video credentials."}
+        </p>
+        <div className="pt-2">
+          <Button asChild size="sm" className="bg-primary text-primary-foreground">
+            <Link href="/appointments">
+              {isStaff ? "Return to Appointments" : t("videoCall.returnToAppointments", "Return to Appointments")}
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </main>
   );
 }
