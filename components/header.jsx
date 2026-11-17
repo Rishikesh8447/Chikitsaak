@@ -63,9 +63,9 @@ const Header = async ({ user: initialUser } = {}) => {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/90 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
-      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
-        <Link href="/" aria-label="Chikitsaak home" className="flex min-w-0 shrink items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="relative block h-9 w-28 shrink-0 overflow-hidden rounded-lg bg-white/95 px-1 ring-1 ring-border/70 min-[375px]:w-32 sm:h-12 sm:w-52 lg:h-14 lg:w-56 dark:bg-white/90">
+      <div className="mx-auto flex h-[4.25rem] max-w-7xl items-center justify-between gap-1.5 px-2 min-[360px]:gap-2 min-[360px]:px-3 sm:gap-4 sm:px-6">
+        <Link href="/" aria-label="Chikitsaak home" className="flex shrink-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span className="relative block h-8 w-24 shrink-0 overflow-hidden rounded-lg bg-white/95 px-1 ring-1 ring-border/70 min-[360px]:h-9 min-[360px]:w-28 min-[400px]:w-32 sm:h-12 sm:w-52 lg:h-14 lg:w-56 dark:bg-white/90">
             <Image src="/chikitsaak-full-logo.png" alt="" fill sizes="(min-width: 1024px) 224px, (min-width: 640px) 208px, 160px" className="object-contain p-1" priority />
           </span>
         </Link>

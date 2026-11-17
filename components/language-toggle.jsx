@@ -21,9 +21,9 @@ export function LanguageToggle({ userRole, className = "" }) {
         type="button"
         disabled
         aria-label="Loading language switcher"
-        className={`inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground ${className}`}
+        className={`inline-flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 rounded-md border border-border bg-card px-1.5 min-[360px]:px-2 sm:px-2.5 text-xs font-medium text-muted-foreground ${className}`}
       >
-        <Languages className="size-3.5 text-muted-foreground" />
+        <Languages className="size-3.5 text-muted-foreground shrink-0" />
         <span>EN</span>
       </button>
     );
@@ -40,9 +40,9 @@ export function LanguageToggle({ userRole, className = "" }) {
       onClick={() => setLocale(nextLocale)}
       aria-label={ariaLabel}
       title={title}
-      className={`inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${className}`}
+      className={`inline-flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 rounded-md border border-border bg-card px-1.5 min-[360px]:px-2 sm:px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${className}`}
     >
-      <Languages className="size-3.5 text-primary" />
+      <Languages className="size-3.5 text-primary shrink-0" />
       <span className="font-semibold">{isHindi ? "हिंदी" : "EN"}</span>
     </button>
   );
@@ -83,7 +83,7 @@ export function FooterContent({ userRole }) {
   const staff = isStaff || userRole === "DOCTOR" || userRole === "ADMIN";
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <div className={`mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 ${!staff ? "pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-6" : ""}`}>
       <p className="font-medium text-foreground">
         Chikitsaak <span className="font-normal text-muted-foreground">· {staff ? "Care, Connected" : t("footer.tagline", "Care, Connected")}</span>
       </p>

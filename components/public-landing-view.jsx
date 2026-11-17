@@ -176,7 +176,7 @@ export function PublicLandingView() {
       </section>
 
       {/* Reassuring Vessel Editorial Banner */}
-      <section className="mx-auto w-full max-w-7xl px-4 pt-2 pb-12 sm:px-6 sm:pt-4 sm:pb-16">
+      <section className="mx-auto w-full max-w-7xl px-4 pt-2 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pt-4 sm:pb-16">
         <div className="relative overflow-hidden rounded-2xl bg-[#173d3b] dark:bg-card dark:border dark:border-border px-6 py-8 text-center text-white sm:px-12 sm:py-10 lg:py-12">
           <Badge variant="outline" className="mb-3 border-teal-300/30 bg-teal-400/10 text-teal-200 dark:border-primary/30 dark:bg-secondary dark:text-primary text-xs">
             {t("landing.ctaBadge", "Private & Confidential")}
